@@ -2,6 +2,7 @@ package massage
 
 import (
 	"distributed/node"
+	"encoding/json"
 	"fmt"
 	"sync/atomic"
 )
@@ -333,6 +334,52 @@ func MakeClusterConnectionResponseMassage(sender, reciver node.Worker, accepted 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = fmt.Sprint(accepted)
 	msgReturn.MassageType = ClusterConnectionResponse
+
+	msgReturn.OriginalSender = sender.GetId()
+	msgReturn.Reciver = reciver.GetId()
+
+	msgReturn.Route = []int{sender.GetId()}
+
+	return &msgReturn
+}
+
+func MakeClusterJobSharingMassage(sender, reciver node.Worker, jobInfo string) *Massage {
+	msgReturn := Massage{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Massage = jobInfo
+	msgReturn.MassageType = JobSharing
+
+	msgReturn.OriginalSender = sender.GetId()
+	msgReturn.Reciver = reciver.GetId()
+
+	msgReturn.Route = []int{sender.GetId()}
+
+	return &msgReturn
+}
+
+func MakeImageInfoRequestMassage(sender, reciver node.Worker) *Massage {
+	msgReturn := Massage{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Massage = "ImageInfoRequest"
+	msgReturn.MassageType = ImageInfoRequest
+
+	msgReturn.OriginalSender = sender.GetId()
+	msgReturn.Reciver = reciver.GetId()
+
+	msgReturn.Route = []int{sender.GetId()}
+
+	return &msgReturn
+}
+
+func MakeImageInfoMassage(sender, reciver node.Worker, points [][]int) *Massage {
+	msgReturn := Massage{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	points_json, _ := json.Marshal(points)
+	msgReturn.Massage = string(points_json)
+	msgReturn.MassageType = ImageInfo
 
 	msgReturn.OriginalSender = sender.GetId()
 	msgReturn.Reciver = reciver.GetId()
