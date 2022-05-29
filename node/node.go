@@ -14,8 +14,9 @@ type INode interface {
 }
 
 type Bootstrap struct {
-	IpAddress string `json:"ipAddress"`
-	Port      int    `json:"port"`
+	IpAddress string       `json:"ipAddress"`
+	Port      int          `json:"port"`
+	Workers   []WorkerInfo `json:"-"`
 }
 
 func (b *Bootstrap) GetAdders() string {
@@ -42,12 +43,13 @@ type Worker struct {
 	Id          int                `json:"nodeId"`
 	IpAddress   string             `json:"ipAddress"`
 	Port        int                `json:"port"`
-	prev        int                `json:"-"`
-	next        int                `json:"-"`
+	Prev        int                `json:"-"`
+	Next        int                `json:"-"`
 	JobId       int                `json:"-"`
 	FractalId   int                `json:"-"`
 	Connections []int              `json:"-"`
 	History     []structures.Point `json:"-"`
+	SystemInfo  []WorkerInfo       `json:"-"`
 }
 
 func (w *Worker) GetAdders() string {
@@ -68,4 +70,10 @@ func (w *Worker) GetType() string {
 
 func (w *Worker) GetId() int {
 	return w.Id
+}
+
+type WorkerInfo struct {
+	Id        int    `json:"nodeId"`
+	IpAddress string `json:"ipAddress"`
+	Port      int    `json:"port"`
 }
