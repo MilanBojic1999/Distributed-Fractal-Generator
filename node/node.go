@@ -11,12 +11,13 @@ type INode interface {
 	GetFullAddress() string
 	GetType() string
 	GetId() int
+	GetNodeInfo() *NodeInfo
 }
 
 type Bootstrap struct {
-	IpAddress string       `json:"ipAddress"`
-	Port      int          `json:"port"`
-	Workers   []WorkerInfo `json:"-"`
+	IpAddress string     `json:"ipAddress"`
+	Port      int        `json:"port"`
+	Workers   []NodeInfo `json:"-"`
 }
 
 func (b *Bootstrap) GetAdders() string {
@@ -39,6 +40,15 @@ func (b *Bootstrap) GetId() int {
 	return -1
 }
 
+func (b *Bootstrap) GetNodeInfo() *NodeInfo {
+	toReturn := new(NodeInfo)
+	toReturn.Id = b.GetId()
+	toReturn.IpAddress = b.GetAdders()
+	toReturn.Port = b.GetPort()
+
+	return toReturn
+}
+
 type Worker struct {
 	Id          int                `json:"nodeId"`
 	IpAddress   string             `json:"ipAddress"`
@@ -49,7 +59,7 @@ type Worker struct {
 	FractalId   int                `json:"-"`
 	Connections []int              `json:"-"`
 	History     []structures.Point `json:"-"`
-	SystemInfo  []WorkerInfo       `json:"-"`
+	SystemInfo  []NodeInfo         `json:"-"`
 }
 
 func (w *Worker) GetAdders() string {
@@ -72,7 +82,16 @@ func (w *Worker) GetId() int {
 	return w.Id
 }
 
-type WorkerInfo struct {
+func (w *Worker) GetNodeInfo() *NodeInfo {
+	toReturn := new(NodeInfo)
+	toReturn.Id = w.GetId()
+	toReturn.IpAddress = w.GetAdders()
+	toReturn.Port = w.GetPort()
+
+	return toReturn
+}
+
+type NodeInfo struct {
 	Id        int    `json:"nodeId"`
 	IpAddress string `json:"ipAddress"`
 	Port      int    `json:"port"`

@@ -25,7 +25,7 @@ var BootstrapNode node.Bootstrap
 
 func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
-	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.WorkerInfo, 10)}
+	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 10)}
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sbootstrapLog.log", FILE_SEPARATOR, FILE_SEPARATOR))
 	if err != nil {
@@ -106,6 +106,9 @@ func processRecivedMassage(msgStruct massage.Massage) {
 }
 
 func proccesHailMassage(msg massage.Massage) {
+
+	// toSend = massage.MakeContactMassage(BootstrapNode)
+
 }
 
 func proccesJoinMassage(msg massage.Massage) {
