@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -23,9 +24,16 @@ var LogErrorChan chan string
 
 var BootstrapNode node.Bootstrap
 
+var EnterenceChannel chan int
+
+var BootstrapTableMutex sync.Mutex
+
 func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
 	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 10)}
+
+	EnterenceChannel = make(chan int, 1)
+	EnterenceChannel <- 1
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sbootstrapLog.log", FILE_SEPARATOR, FILE_SEPARATOR))
 	if err != nil {
@@ -96,25 +104,51 @@ func processRecivedMassage(msgStruct massage.Massage) {
 
 	switch msgStruct.MassageType {
 	case massage.Hail:
-		proccesHailMassage(msgStruct)
+		go proccesHailMassage(msgStruct)
 	case massage.Join:
-		proccesJoinMassage(msgStruct)
+		go proccesJoinMassage(msgStruct)
 	case massage.Leave:
-		proccesLeaveMassage(msgStruct)
+		go proccesLeaveMassage(msgStruct)
 	}
 
 }
 
 func proccesHailMassage(msg massage.Massage) {
 
-	// toSend = massage.MakeContactMassage(BootstrapNode)
+	<-EnterenceChannel // ulazimo u kriticnu sekciju
+	var toSend *massage.Massage
+	if len(BootstrapNode.Workers) == 0 {
+		toSend = massage.MakeContactMassage(BootstrapNode, node.NodeInfo{Id: -1, IpAddress: "", Port: 0})
 
+	} else {
+		toSend = massage.MakeContactMassage(BootstrapNode, BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
+	}
+	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
+	EnterenceChannel <- 1
 }
 
 func proccesJoinMassage(msg massage.Massage) {
-
+	BootstrapNode.Workers = append(BootstrapNode.Workers, msg.OriginalSender)
 }
 
 func proccesLeaveMassage(msg massage.Massage) {
+	BootstrapTableMutex.Lock()
+	defer BootstrapTableMutex.Unlock()
 
+}
+
+func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {
+	connOut, err := net.DialTimeout("tcp", reciver.GetFullAddress(), time.Duration(1)*time.Second)
+	if err != nil {
+		if _, ok := err.(net.Error); ok {
+			// fmt.Println("Error received while connecting to ", reciver.NodeId)
+			check(err, "sendMessage")
+			return false
+		}
+	} else {
+		json.NewEncoder(connOut).Encode(&msg)
+		connOut.Close()
+	}
+
+	return true
 }

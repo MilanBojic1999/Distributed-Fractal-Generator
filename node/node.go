@@ -96,3 +96,7 @@ type NodeInfo struct {
 	IpAddress string `json:"ipAddress"`
 	Port      int    `json:"port"`
 }
+
+func (w *NodeInfo) GetFullAddress() string {
+	return fmt.Sprintf("%s:%d", w.IpAddress, w.Port)
+}

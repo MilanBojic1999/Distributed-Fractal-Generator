@@ -156,7 +156,7 @@ func MakeHailMassage(sender node.Worker, reciver node.Bootstrap) *Massage {
 	return &msgReturn
 }
 
-func MakeContactMassage(sender node.Bootstrap, reciver node.Worker) *Massage {
+func MakeContactMassage(sender node.Bootstrap, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -164,7 +164,7 @@ func MakeContactMassage(sender node.Bootstrap, reciver node.Worker) *Massage {
 	msgReturn.MassageType = Contact
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.Reciver = reciver
 
 	msgReturn.Route = []int{sender.GetId()}
 
@@ -175,7 +175,7 @@ func MakeWelcomeMassage(sender, reciver node.Worker) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = "Contact"
+	msgReturn.Massage = "Welcome"
 	msgReturn.MassageType = Welcome
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()
