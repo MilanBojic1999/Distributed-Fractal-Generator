@@ -1,7 +1,8 @@
-package bootstrap
+package worker
 
 import (
 	chanfile "distributed/chainfile"
+	"distributed/job"
 	"distributed/massage"
 	"distributed/node"
 	"encoding/json"
@@ -25,15 +26,23 @@ var LogErrorChan chan string
 var BootstrapNode node.Bootstrap
 
 var EnterenceChannel chan int
+var WorkerEnteredChannel chan int
 
 var BootstrapTableMutex sync.Mutex
 
-func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
+var allJobs []job.Job
 
-	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 10)}
+var WorkerNode node.Worker
 
-	EnterenceChannel = make(chan int, 1)
-	EnterenceChannel <- 1
+func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
+
+	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 1)}
+
+	WorkerNode = node.Worker{}
+	WorkerNode.IpAddress = ipAddres
+	WorkerNode.Port = port
+
+	copy(allJobs, jobs)
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sbootstrapLog.log", FILE_SEPARATOR, FILE_SEPARATOR))
 	if err != nil {
@@ -44,6 +53,10 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 	if err != nil {
 		check(err, "LogFile")
 	}
+
+	EnterenceChannel = make(chan int, 1)
+	WorkerEnteredChannel = make(chan int, 1)
+	EnterenceChannel <- 1
 
 	LogFileChan = make(chan string)
 	LogErrorChan = make(chan string)
@@ -56,7 +69,13 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 	go ErrorWritenFile.WriteFileFromChan()
 	go WritenFile.WriteFileFromChan()
 
-	listenOnPort(ListenChan)
+	go listenOnPort(ListenChan)
+
+	enterneceSystemMassage := massage.MakeHailMassage(WorkerNode, BootstrapNode)
+	sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), enterneceSystemMassage)
+
+	<-WorkerEnteredChannel // we wait to enter to system
+
 }
 
 func listenOnPort(listenChan chan int32) {
@@ -101,58 +120,45 @@ func listenOnPort(listenChan chan int32) {
 }
 
 func processRecivedMassage(msgStruct massage.Massage) {
-
-	LogFileChan <- "Finally Recived " + msgStruct.Log()
-
 	switch msgStruct.MassageType {
-	case massage.Hail:
-		go proccesHailMassage(msgStruct)
-	case massage.Join:
-		go proccesJoinMassage(msgStruct)
-	case massage.Leave:
-		go proccesLeaveMassage(msgStruct)
-
+	case massage.Contact:
+		go proccesContactMassage(msgStruct)
+	case massage.Welcome:
+		go proccesWelcomeMassage(msgStruct)
+	case massage.Entered:
+		go proccesEnteredMassage(msgStruct)
+	case massage.SystemKnock:
+		go proccesSystemKnockMassage(msgStruct)
 	}
-
 }
 
-func proccesHailMassage(msg massage.Massage) {
+func proccesContactMassage(msgStruct massage.Massage) {
 
-	<-EnterenceChannel // ulazimo u kriticnu sekciju
-	var toSend *massage.Massage
-	if len(BootstrapNode.Workers) == 0 {
-		toSend = massage.MakeContactMassage(BootstrapNode, node.NodeInfo{Id: -1, IpAddress: "", Port: 0})
+	var ContactInfo node.NodeInfo
 
+	json.Unmarshal([]byte(msgStruct.GetMassage()), &ContactInfo)
+	if ContactInfo.Id == -1 {
+		WorkerNode.Id = 0
+		toSend := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
+		go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSend)
+		WorkerEnteredChannel <- 1
 	} else {
-		toSend = massage.MakeContactMassage(BootstrapNode, BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
+		knockMassage := massage.MakeSystemKnockMassage(WorkerNode, ContactInfo)
+		sendMessage(WorkerNode.GetNodeInfo(), &ContactInfo, knockMassage)
 	}
-	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
-	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
+
 }
 
-func proccesJoinMassage(msg massage.Massage) {
-	BootstrapNode.Workers = append(BootstrapNode.Workers, msg.OriginalSender)
+func proccesWelcomeMassage(msgStruct massage.Massage) {
+
 }
 
-func proccesLeaveMassage(msg massage.Massage) {
-	BootstrapTableMutex.Lock()
-	defer BootstrapTableMutex.Unlock()
+func proccesSystemKnockMassage(msgStruct massage.Massage) {
 
-	nodeIndex := -1
-	for ind, val := range BootstrapNode.Workers {
-		if val.Id == msg.OriginalSender.Id {
-			nodeIndex = ind
-			break
-		}
-	}
+}
 
-	if nodeIndex == -1 {
-		LogErrorChan <- fmt.Sprintf("Tried to remove node from the system: %v", msg.OriginalSender.String())
-		return
-	}
+func proccesEnteredMassage(msgStruct massage.Massage) {
 
-	copy(BootstrapNode.Workers[nodeIndex:], BootstrapNode.Workers[nodeIndex+1:])
-	BootstrapNode.Workers = BootstrapNode.Workers[:len(BootstrapNode.Workers)-1]
 }
 
 func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {

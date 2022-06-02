@@ -100,3 +100,7 @@ type NodeInfo struct {
 func (w *NodeInfo) GetFullAddress() string {
 	return fmt.Sprintf("%s:%d", w.IpAddress, w.Port)
 }
+
+func (w *NodeInfo) String() string {
+	return fmt.Sprintf("%d >< %s:%d", w.Id, w.IpAddress, w.Port)
+}

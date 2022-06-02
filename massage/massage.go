@@ -28,6 +28,7 @@ const (
 	JobSharing                MassageType = 15
 	ImageInfoRequest          MassageType = 16
 	ImageInfo                 MassageType = 17
+	SystemKnock               MassageType = 18
 )
 
 type MassageCounter struct {
@@ -180,6 +181,21 @@ func MakeWelcomeMassage(sender, reciver node.Worker) *Massage {
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()
 	msgReturn.Reciver = *reciver.GetNodeInfo()
+
+	msgReturn.Route = []int{sender.GetId()}
+
+	return &msgReturn
+}
+
+func MakeSystemKnockMassage(sender node.Worker, reciver node.NodeInfo) *Massage {
+	msgReturn := Massage{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Massage = "SystemKnock"
+	msgReturn.MassageType = SystemKnock
+
+	msgReturn.OriginalSender = *sender.GetNodeInfo()
+	msgReturn.Reciver = reciver
 
 	msgReturn.Route = []int{sender.GetId()}
 
