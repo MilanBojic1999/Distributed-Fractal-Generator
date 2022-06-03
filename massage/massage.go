@@ -172,7 +172,7 @@ func MakeContactMassage(sender node.Bootstrap, reciver node.NodeInfo) *Massage {
 	return &msgReturn
 }
 
-func MakeWelcomeMassage(sender, reciver node.Worker, nodeId int, systemInfo []node.NodeInfo) *Massage {
+func MakeWelcomeMassage(sender, reciver node.NodeInfo, nodeId int, systemInfo map[int]node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -182,10 +182,10 @@ func MakeWelcomeMassage(sender, reciver node.Worker, nodeId int, systemInfo []no
 	msgReturn.Massage = string(msgb)
 	msgReturn.MassageType = Welcome
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
@@ -239,11 +239,16 @@ func MakeEnteredMassage(sender node.Worker) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = fmt.Sprint(sender.GetId())
+
+	msgjson, _ := json.Marshal(sender.GetNodeInfo())
+
+	msgReturn.Massage = string(msgjson)
 	msgReturn.MassageType = Entered
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *new(node.NodeInfo)
+	reciver := new(node.NodeInfo)
+	reciver.Id = -1
+	msgReturn.Reciver = *reciver
 
 	msgReturn.Route = []int{sender.GetId()}
 

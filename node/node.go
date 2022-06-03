@@ -59,7 +59,7 @@ type Worker struct {
 	FractalId   int                `json:"-"`
 	Connections []int              `json:"-"`
 	History     []structures.Point `json:"-"`
-	SystemInfo  []NodeInfo         `json:"-"`
+	SystemInfo  map[int]NodeInfo   `json:"-"`
 }
 
 func (w *Worker) GetAdders() string {

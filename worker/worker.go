@@ -28,7 +28,8 @@ var BootstrapNode node.Bootstrap
 var EnterenceChannel chan int
 var WorkerEnteredChannel chan int
 
-var BootstrapTableMutex sync.Mutex
+var WorkerTableMutex sync.Mutex
+var WorkerEnterenceMutex sync.Mutex
 
 var allJobs []job.Job
 
@@ -162,25 +163,54 @@ func proccesWelcomeMassage(msgStruct massage.Massage) {
 	}
 	WorkerNode.Id = newNodeId
 
-	SystemInfo, ok := msgMap["systemInfo"].([]node.NodeInfo)
+	SystemInfoRecived, ok := msgMap["systemInfo"].(map[int]node.NodeInfo)
 	if !ok {
 		LogErrorChan <- fmt.Sprintf("Wrong massage given: %s", msgStruct.GetMassage())
 		return
 	}
 
-	copy(WorkerNode.SystemInfo, SystemInfo)
+	for k, v := range SystemInfoRecived {
+		WorkerNode.SystemInfo[k] = v
+	}
 
 }
 
 func proccesSystemKnockMassage(msgStruct massage.Massage) {
 
+	WorkerEnterenceMutex.Lock()
+	defer WorkerEnterenceMutex.Unlock()
+	maxIndex := WorkerNode.Id
+	for key, _ := range WorkerNode.SystemInfo {
+		if maxIndex < key {
+			maxIndex = key
+		}
+	}
+	if maxIndex != WorkerNode.Id {
+		tmp := WorkerNode.SystemInfo[maxIndex]
+		newMassage := msgStruct.MakeMeASender(&WorkerNode)
+		sendMessage(&msgStruct.OriginalSender, &tmp, newMassage)
+		return
+	}
+
+	toSand := massage.MakeWelcomeMassage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, maxIndex+1, WorkerNode.SystemInfo)
+	sendMessage(WorkerNode.GetNodeInfo(), &msgStruct.OriginalSender, toSand)
 }
 
 func proccesEnteredMassage(msgStruct massage.Massage) {
 
+	var newNodeInfo node.NodeInfo
+	json.Unmarshal([]byte(msgStruct.Massage), &newNodeInfo)
+
+	if val, ok := WorkerNode.SystemInfo[newNodeInfo.Id]; ok {
+		LogErrorChan <- fmt.Sprintf("Tried to info system %v , but already have %v", newNodeInfo, val)
+		return
+	}
+
+	WorkerNode.SystemInfo[newNodeInfo.Id] = newNodeInfo
+
 }
 
-func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {
+func sendMessage(sender, reciver *node.NodeInfo, msg massage.IMassage) bool {
 	connOut, err := net.DialTimeout("tcp", reciver.GetFullAddress(), time.Duration(1)*time.Second)
 	if err != nil {
 		if _, ok := err.(net.Error); ok {
