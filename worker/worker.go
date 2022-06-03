@@ -151,6 +151,25 @@ func proccesContactMassage(msgStruct massage.Massage) {
 
 func proccesWelcomeMassage(msgStruct massage.Massage) {
 
+	var msgMap map[string]interface{}
+
+	json.Unmarshal([]byte(msgStruct.GetMassage()), &msgMap)
+
+	newNodeId, ok := msgMap["id"].(int)
+	if !ok {
+		LogErrorChan <- fmt.Sprintf("Wrong massage given: %s", msgStruct.GetMassage())
+		return
+	}
+	WorkerNode.Id = newNodeId
+
+	SystemInfo, ok := msgMap["systemInfo"].([]node.NodeInfo)
+	if !ok {
+		LogErrorChan <- fmt.Sprintf("Wrong massage given: %s", msgStruct.GetMassage())
+		return
+	}
+
+	copy(WorkerNode.SystemInfo, SystemInfo)
+
 }
 
 func proccesSystemKnockMassage(msgStruct massage.Massage) {

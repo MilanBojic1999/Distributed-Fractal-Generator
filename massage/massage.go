@@ -172,11 +172,14 @@ func MakeContactMassage(sender node.Bootstrap, reciver node.NodeInfo) *Massage {
 	return &msgReturn
 }
 
-func MakeWelcomeMassage(sender, reciver node.Worker) *Massage {
+func MakeWelcomeMassage(sender, reciver node.Worker, nodeId int, systemInfo []node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = "Welcome"
+
+	msgMap := map[string]interface{}{"id": nodeId, "systemInfo": systemInfo}
+	msgb, _ := json.Marshal(msgMap)
+	msgReturn.Massage = string(msgb)
 	msgReturn.MassageType = Welcome
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()
