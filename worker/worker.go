@@ -141,6 +141,8 @@ func proccesContactMassage(msgStruct massage.Massage) {
 	if ContactInfo.Id == -1 {
 		WorkerNode.Id = 0
 		toSend := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
+		LogFileChan <- "Entered system with id 0. I'm the first one"
+
 		go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSend)
 		WorkerEnteredChannel <- 1
 	} else {
@@ -172,13 +174,25 @@ func proccesWelcomeMassage(msgStruct massage.Massage) {
 	for k, v := range SystemInfoRecived {
 		WorkerNode.SystemInfo[k] = v
 	}
+	WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
 
+	LogFileChan <- fmt.Sprintf("Finnaly entered system with id %d ", WorkerNode.Id)
+
+	toSend := massage.MakeEnteredMassage(WorkerNode)
+	go broadcastMassage(&WorkerNode, toSend)
+
+	toSendBootstrap := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
+	go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSendBootstrap)
+	WorkerEnteredChannel <- 1
 }
 
 func proccesSystemKnockMassage(msgStruct massage.Massage) {
 
 	WorkerEnterenceMutex.Lock()
 	defer WorkerEnterenceMutex.Unlock()
+
+	LogFileChan <- fmt.Sprintf("Node: %v knocked on this system. I'm contact.", msgStruct.OriginalSender)
+
 	maxIndex := WorkerNode.Id
 	for key, _ := range WorkerNode.SystemInfo {
 		if maxIndex < key {
@@ -186,6 +200,7 @@ func proccesSystemKnockMassage(msgStruct massage.Massage) {
 		}
 	}
 	if maxIndex != WorkerNode.Id {
+		LogFileChan <- fmt.Sprintf("Node: %v knocked on this system,But Im not youngest in the system (Node %d)", msgStruct.OriginalSender, maxIndex)
 		tmp := WorkerNode.SystemInfo[maxIndex]
 		newMassage := msgStruct.MakeMeASender(&WorkerNode)
 		sendMessage(&msgStruct.OriginalSender, &tmp, newMassage)
@@ -207,6 +222,7 @@ func proccesEnteredMassage(msgStruct massage.Massage) {
 	}
 
 	WorkerNode.SystemInfo[newNodeInfo.Id] = newNodeInfo
+	LogFileChan <- fmt.Sprintf("New node in the system: %v", newNodeInfo)
 
 }
 
@@ -224,4 +240,13 @@ func sendMessage(sender, reciver *node.NodeInfo, msg massage.IMassage) bool {
 	}
 
 	return true
+}
+
+func broadcastMassage(sender *node.Worker, msg massage.IMassage) bool {
+	result := true
+	for _, val := range sender.SystemInfo {
+		result = result && sendMessage(sender.GetNodeInfo(), &val, msg)
+	}
+
+	return result
 }

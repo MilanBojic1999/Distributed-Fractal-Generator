@@ -56,6 +56,8 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 	go ErrorWritenFile.WriteFileFromChan()
 	go WritenFile.WriteFileFromChan()
 
+	LogFileChan <- "Bootstrap is running"
+
 	listenOnPort(ListenChan)
 }
 
