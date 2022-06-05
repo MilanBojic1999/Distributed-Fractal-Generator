@@ -8,5 +8,6 @@ type Job struct {
 	Ration     float32            `json:"p"`
 	Width      int                `json:"width"`
 	Height     int                `json:"height"`
+	MainPoints []structures.Point `json:"mainPoints"`
 	Points     []structures.Point `json:"-"`
 }

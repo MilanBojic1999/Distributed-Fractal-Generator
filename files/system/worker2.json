@@ -3,7 +3,8 @@
     "port":9002,
     "bootstrapIpAddress": "172.23.143.180",
     "bootstrapPort":7777,
-    "jobs": [{"name":"Jobo","pointCount":5,"p":0.4,"width":1000,"height":1000},{"name":"Jabo","pointCount":10,"p":0.1,"width":1000,"height":1000}]
+    "jobs": [{"name":"Jobo","pointCount":3,"p":0.4,"width":1000,"height":1000,"mainPoints":[{"x":0,"y":0},{"x":1,"y":2},{"x":1,"y":4}]},
+    {"name":"Jabo4","pointCount":4,"p":0.1,"width":1000,"height":1000,"mainPoints":[{"x":0,"y":0},{"x":1,"y":2},{"x":10,"y":20},{"x":1,"y":3}]}]
 }
 
 

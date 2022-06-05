@@ -41,5 +41,6 @@ func (q *Queue) Dequeue() (int, bool) {
 }
 
 type Point struct {
-	x, y int
+	X int `json:"x"`
+	Y int `json:"y"`
 }

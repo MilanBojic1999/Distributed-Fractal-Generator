@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bufio"
 	chanfile "distributed/chainfile"
 	"distributed/massage"
 	"distributed/node"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,6 +29,9 @@ var BootstrapNode node.Bootstrap
 var EnterenceChannel chan int
 
 var BootstrapTableMutex sync.Mutex
+
+var ListenPortListenChan chan int32
+var CommandPortListenChan chan int32
 
 func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
@@ -48,7 +53,8 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 	LogFileChan = make(chan string)
 	LogErrorChan = make(chan string)
 
-	ListenChan := make(chan int32)
+	ListenPortListenChan = make(chan int32)
+	CommandPortListenChan = make(chan int32)
 
 	WritenFile := chanfile.ChanFile{File: LogFile, InputChan: LogFileChan}
 	ErrorWritenFile := chanfile.ChanFile{File: ErrorFile, InputChan: LogErrorChan}
@@ -58,7 +64,9 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
 	LogFileChan <- "Bootstrap is running"
 
-	listenOnPort(ListenChan)
+	go listenOnPort(ListenPortListenChan)
+
+	listenCommand(CommandPortListenChan)
 }
 
 func listenOnPort(listenChan chan int32) {
@@ -124,9 +132,9 @@ func proccesHailMassage(msg massage.Massage) {
 	var toSend *massage.Massage
 	fmt.Println(len(BootstrapNode.Workers))
 	if len(BootstrapNode.Workers) == 0 {
-		toSend = massage.MakeContactMassage(BootstrapNode, msg.GetSender(), node.NodeInfo{Id: -1, IpAddress: "rafhost", Port: -10})
+		toSend = massage.MakeContactMassage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), node.NodeInfo{Id: -1, IpAddress: "rafhost", Port: -10})
 	} else {
-		toSend = massage.MakeContactMassage(BootstrapNode, msg.GetSender(), BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
+		toSend = massage.MakeContactMassage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
 	}
 	fmt.Println(toSend.Massage)
 	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
@@ -172,4 +180,56 @@ func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {
 	}
 
 	return true
+}
+
+func systemBroadcastMassage(msg *massage.Massage) {
+	for _, v := range BootstrapNode.Workers {
+		sendMessage(BootstrapNode.GetNodeInfo(), &v, msg)
+	}
+}
+
+func parseCommand(commandArg string) bool {
+	if len(commandArg) == 0 {
+		return true
+	}
+
+	command_arr := strings.SplitN(commandArg, " ", 2)
+	command := command_arr[0]
+	if strings.EqualFold(command, "quit") {
+		fmt.Println("Quitting...")
+		ListenPortListenChan <- 1
+		time.Sleep(time.Second)
+		return false
+	} else if strings.EqualFold(command, "purge") {
+		toSend := massage.MakePurgeMassage(*BootstrapNode.GetNodeInfo())
+		go systemBroadcastMassage(toSend)
+		ListenPortListenChan <- 1
+		return false
+	} else {
+		fmt.Printf("Unknown command: %s\n", command)
+		return true
+	}
+}
+
+func listenCommand(listenChan chan int32) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Simple Shell")
+	fmt.Println("---------------------")
+
+	for {
+		select {
+		case <-listenChan:
+			return
+		default:
+			fmt.Print(":> ")
+			text, _ := reader.ReadString('\n')
+
+			text = strings.Replace(text, "\n", "", -1)
+
+			if !parseCommand(text) {
+				return
+			}
+
+		}
+	}
 }

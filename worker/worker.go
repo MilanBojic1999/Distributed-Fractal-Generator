@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bufio"
 	chanfile "distributed/chainfile"
 	"distributed/job"
 	"distributed/massage"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,9 @@ func check(e error, addition string) {
 var LogFileChan chan string
 var LogErrorChan chan string
 
+var ListenPortListenChan chan int32
+var CommandPortListenChan chan int32
+
 var BootstrapNode node.Bootstrap
 
 var EnterenceChannel chan int
@@ -33,8 +38,9 @@ var WorkerEnteredChannel chan int
 
 var WorkerTableMutex sync.Mutex
 var WorkerEnterenceMutex sync.Mutex
+var ConnectionWaitGroup sync.WaitGroup
 
-var allJobs []job.Job
+var allJobs map[string]job.Job
 
 var WorkerNode node.Worker
 
@@ -47,8 +53,15 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerNode.Port = port
 
 	WorkerNode.SystemInfo = make(map[int]node.NodeInfo)
-	allJobs = make([]job.Job, len(jobs))
-	copy(allJobs, jobs)
+
+	for _, v := range jobs {
+		if v, ok := allJobs[v.Name]; !ok {
+			LogErrorChan <- fmt.Sprintf("Job already exist: %v", v)
+			continue
+		}
+		allJobs[v.Name] = v
+	}
+
 	fmt.Printf("\nWut: %v\n", allJobs)
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
@@ -68,7 +81,8 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	LogFileChan = make(chan string, 15)
 	LogErrorChan = make(chan string, 15)
 
-	ListenChan := make(chan int32)
+	ListenPortListenChan = make(chan int32, 2)
+	CommandPortListenChan = make(chan int32, 2)
 
 	WritenFile := chanfile.ChanFile{File: LogFile, InputChan: LogFileChan}
 	ErrorWritenFile := chanfile.ChanFile{File: ErrorFile, InputChan: LogErrorChan}
@@ -78,7 +92,7 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	go ErrorWritenFile.WriteFileFromChan()
 	go WritenFile.WriteFileFromChan()
 
-	go listenOnPort(ListenChan)
+	go listenOnPort(ListenPortListenChan)
 
 	enterneceSystemMassage := massage.MakeHailMassage(WorkerNode, BootstrapNode)
 	sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), enterneceSystemMassage)
@@ -86,10 +100,15 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	<-WorkerEnteredChannel // we wait to enter to system
 
 	LogFileChan <- "Worker is working"
-
-	time.Sleep(time.Second * 15)
 	fmt.Println(WorkerNode.SystemInfo)
 
+	if len(WorkerNode.SystemInfo) > 1 {
+		makeInitConnections()
+	}
+
+	listenCommand(CommandPortListenChan)
+
+	fmt.Println("JOH")
 }
 
 func listenOnPort(listenChan chan int32) {
@@ -146,6 +165,12 @@ func processRecivedMassage(msgStruct massage.Massage) {
 		go proccesEnteredMassage(msgStruct)
 	case massage.SystemKnock:
 		go proccesSystemKnockMassage(msgStruct)
+	case massage.ConnectionRequest:
+		go proccesConnectionRequest(msgStruct)
+	case massage.ConnectionResponse:
+		go proccesConnectionResponse(msgStruct)
+	case massage.Purge:
+		go proccesPurgeResponse(msgStruct)
 	}
 }
 
@@ -157,14 +182,14 @@ func proccesContactMassage(msgStruct massage.Massage) {
 
 	if ContactInfo.Id == -1 {
 		WorkerNode.Id = 0
-		toSend := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
+		toSend := massage.MakeJoinMassage(*WorkerNode.GetNodeInfo(), *BootstrapNode.GetNodeInfo())
 		LogFileChan <- "Entered system with id 0. I'm the first one"
 
 		go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSend)
 		WorkerNode.SystemInfo[0] = *WorkerNode.GetNodeInfo()
 		WorkerEnteredChannel <- 1
 	} else {
-		knockMassage := massage.MakeSystemKnockMassage(WorkerNode, ContactInfo)
+		knockMassage := massage.MakeSystemKnockMassage(*WorkerNode.GetNodeInfo(), ContactInfo)
 		sendMessage(WorkerNode.GetNodeInfo(), &ContactInfo, knockMassage)
 	}
 
@@ -202,10 +227,10 @@ func proccesWelcomeMassage(msgStruct massage.Massage) {
 
 	LogFileChan <- fmt.Sprintf("System info: %v", WorkerNode.SystemInfo)
 
-	toSend := massage.MakeEnteredMassage(WorkerNode)
+	toSend := massage.MakeEnteredMassage(*WorkerNode.GetNodeInfo())
 	go broadcastMassage(&WorkerNode, toSend)
 
-	toSendBootstrap := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
+	toSendBootstrap := massage.MakeJoinMassage(*WorkerNode.GetNodeInfo(), *BootstrapNode.GetNodeInfo())
 	go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSendBootstrap)
 	WorkerEnteredChannel <- 1
 }
@@ -218,9 +243,9 @@ func proccesSystemKnockMassage(msgStruct massage.Massage) {
 	LogFileChan <- fmt.Sprintf("Node: %v knocked on this system. I'm contact.", msgStruct.OriginalSender)
 
 	maxIndex := WorkerNode.Id
-	for key, _ := range WorkerNode.SystemInfo {
-		if maxIndex < key {
-			maxIndex = key
+	for _, val := range WorkerNode.SystemInfo {
+		if maxIndex < val.Id {
+			maxIndex = val.Id
 		}
 	}
 	if maxIndex != WorkerNode.Id {
@@ -247,7 +272,58 @@ func proccesEnteredMassage(msgStruct massage.Massage) {
 
 	WorkerNode.SystemInfo[newNodeInfo.Id] = newNodeInfo
 	LogFileChan <- fmt.Sprintf("New node in the system: %v", newNodeInfo)
+}
 
+func proccesConnectionRequest(msgStruct massage.Massage) {
+
+	direction := msgStruct.GetMassage()
+
+	if strings.Compare(direction, string(massage.Next)) == 0 {
+		WorkerNode.Prev = msgStruct.OriginalSender.Id
+	} else {
+		WorkerNode.Next = msgStruct.OriginalSender.Id
+	}
+
+	toSend := massage.MakeConnectionResponseMassage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), true, massage.ConnectionSmer(direction))
+	sendMessage(WorkerNode.GetNodeInfo(), &msgStruct.OriginalSender, toSend)
+}
+
+func proccesConnectionResponse(msgStruct massage.Massage) {
+
+	massage_arr := strings.Split(msgStruct.GetMassage(), ":")
+
+	accepted, _ := strconv.ParseBool(massage_arr[0])
+	direction := massage_arr[1]
+
+	if accepted {
+		if strings.Compare(direction, string(massage.Next)) == 0 {
+			WorkerNode.Next = msgStruct.OriginalSender.Id
+		} else {
+			WorkerNode.Prev = msgStruct.OriginalSender.Id
+		}
+	}
+	ConnectionWaitGroup.Done()
+}
+
+func proccesPurgeResponse(msgStruct massage.Massage) {
+
+	CommandPortListenChan <- 1
+	ListenPortListenChan <- 1
+	LogFileChan <- "System purge"
+}
+
+func makeInitConnections() {
+
+	ConnectionWaitGroup.Add(2)
+	toSendNext := massage.MakeConnectionRequestMassage(*WorkerNode.GetNodeInfo(), WorkerNode.SystemInfo[0], massage.Next)
+	tmpNI := WorkerNode.SystemInfo[0]
+	sendMessage(WorkerNode.GetNodeInfo(), &tmpNI, toSendNext)
+
+	toSendPrev := massage.MakeConnectionRequestMassage(*WorkerNode.GetNodeInfo(), WorkerNode.SystemInfo[WorkerNode.Id-1], massage.Prev)
+	tmpNI = WorkerNode.SystemInfo[WorkerNode.Id-1]
+	sendMessage(WorkerNode.GetNodeInfo(), &tmpNI, toSendPrev)
+
+	ConnectionWaitGroup.Wait()
 }
 
 func sendMessage(sender, reciver *node.NodeInfo, msg massage.IMassage) bool {
@@ -273,4 +349,42 @@ func broadcastMassage(sender *node.Worker, msg massage.IMassage) bool {
 	}
 
 	return result
+}
+
+func parseCommand(commandArg string) bool {
+
+	command_arr := strings.SplitN(commandArg, " ", 2)
+	command := command_arr[0]
+	if strings.EqualFold(command, "quit") {
+		fmt.Println("Quitting...")
+		ListenPortListenChan <- 1
+		time.Sleep(time.Second)
+		return false
+	} else {
+		fmt.Printf("Unknown command: %s\n", command)
+		return true
+	}
+}
+
+func listenCommand(listenChan chan int32) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Simple Shell")
+	fmt.Println("---------------------")
+
+	for {
+		select {
+		case <-listenChan:
+			return
+		default:
+			fmt.Print(":> ")
+			text, _ := reader.ReadString('\n')
+
+			text = strings.Replace(text, "\n", "", -1)
+
+			if !parseCommand(text) {
+				return
+			}
+
+		}
+	}
 }

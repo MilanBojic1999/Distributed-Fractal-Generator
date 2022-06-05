@@ -29,6 +29,7 @@ const (
 	ImageInfoRequest          MassageType = 16
 	ImageInfo                 MassageType = 17
 	SystemKnock               MassageType = 18
+	Purge                     MassageType = 19
 )
 
 type MassageCounter struct {
@@ -157,7 +158,7 @@ func MakeHailMassage(sender node.Worker, reciver node.Bootstrap) *Massage {
 	return &msgReturn
 }
 
-func MakeContactMassage(sender node.Bootstrap, reciver, contact node.NodeInfo) *Massage {
+func MakeContactMassage(sender node.NodeInfo, reciver, contact node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -165,10 +166,10 @@ func MakeContactMassage(sender node.Bootstrap, reciver, contact node.NodeInfo) *
 	msgReturn.Massage = string(contact_byte)
 	msgReturn.MassageType = Contact
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
+	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
@@ -191,67 +192,67 @@ func MakeWelcomeMassage(sender, reciver node.NodeInfo, nodeId int, systemInfo ma
 	return &msgReturn
 }
 
-func MakeSystemKnockMassage(sender node.Worker, reciver node.NodeInfo) *Massage {
+func MakeSystemKnockMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = "SystemKnock"
 	msgReturn.MassageType = SystemKnock
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
+	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeJoinMassage(sender node.Worker, reciver node.Bootstrap) *Massage {
+func MakeJoinMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = fmt.Sprint(sender.GetId())
+	msgReturn.Massage = fmt.Sprint(sender.Id)
 	msgReturn.MassageType = Join
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeLeaveMassage(sender node.Worker, reciver node.Bootstrap) *Massage {
+func MakeLeaveMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = fmt.Sprint(sender.GetId())
+	msgReturn.Massage = fmt.Sprint(sender.Id)
 	msgReturn.MassageType = Leave
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeEnteredMassage(sender node.Worker) *Massage {
+func MakeEnteredMassage(sender node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	msgjson, _ := json.Marshal(sender.GetNodeInfo())
+	msgjson, _ := json.Marshal(sender)
 
 	msgReturn.Massage = string(msgjson)
 	msgReturn.MassageType = Entered
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
+	msgReturn.OriginalSender = sender
 	reciver := new(node.NodeInfo)
 	reciver.Id = -1
 	msgReturn.Reciver = *reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
@@ -263,142 +264,141 @@ const (
 	Prev ConnectionSmer = "PREV"
 )
 
-func MakeConnectionRequestMassage(sender, reciver node.Worker, smer ConnectionSmer) *Massage {
+func MakeConnectionRequestMassage(sender, reciver node.NodeInfo, smer ConnectionSmer) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = string(smer)
 	msgReturn.MassageType = ConnectionRequest
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeConnectionResponseMassage(sender, reciver node.Worker, accepted bool, smer ConnectionSmer) *Massage {
+func MakeConnectionResponseMassage(sender, reciver node.NodeInfo, accepted bool, smer ConnectionSmer) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = fmt.Sprintf("%t:%v", accepted, smer)
 	msgReturn.MassageType = ConnectionResponse
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeQuitMassage(sender node.Worker) *Massage {
+func MakeQuitMassage(sender node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = fmt.Sprint(sender.GetId())
+	msgReturn.Massage = fmt.Sprint(sender.Id)
 	msgReturn.MassageType = Quit
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
+	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = *new(node.NodeInfo)
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeClusterKnockMassage(sender, reciver node.Worker) *Massage {
+func MakeClusterKnockMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = "ClusterKnock"
 	msgReturn.MassageType = ClusterKnock
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeClusterEnterMassage(sender, reciver node.Worker) *Massage {
+func MakeClusterEnterMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = "EnterCluster"
 	msgReturn.MassageType = EnterCluster
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
-
+	msgReturn.Route = []int{sender.Id}
 	return &msgReturn
 }
 
-func MakeClusterConnectionRequestMassage(sender, reciver node.Worker) *Massage {
+func MakeClusterConnectionRequestMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = "ClusterConnectionRequest"
 	msgReturn.MassageType = ClusterConnectionRequest
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeClusterConnectionResponseMassage(sender, reciver node.Worker, accepted bool) *Massage {
+func MakeClusterConnectionResponseMassage(sender, reciver node.NodeInfo, accepted bool) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = fmt.Sprint(accepted)
 	msgReturn.MassageType = ClusterConnectionResponse
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeClusterJobSharingMassage(sender, reciver node.Worker, jobInfo string) *Massage {
+func MakeClusterJobSharingMassage(sender, reciver node.NodeInfo, jobInfo string) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = jobInfo
 	msgReturn.MassageType = JobSharing
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeImageInfoRequestMassage(sender, reciver node.Worker) *Massage {
+func MakeImageInfoRequestMassage(sender, reciver node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Massage = "ImageInfoRequest"
 	msgReturn.MassageType = ImageInfoRequest
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
 
-func MakeImageInfoMassage(sender, reciver node.Worker, points [][]int) *Massage {
+func MakeImageInfoMassage(sender, reciver node.NodeInfo, points [][]int) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -406,10 +406,25 @@ func MakeImageInfoMassage(sender, reciver node.Worker, points [][]int) *Massage 
 	msgReturn.Massage = string(points_json)
 	msgReturn.MassageType = ImageInfo
 
-	msgReturn.OriginalSender = *sender.GetNodeInfo()
-	msgReturn.Reciver = *reciver.GetNodeInfo()
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
-	msgReturn.Route = []int{sender.GetId()}
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakePurgeMassage(sender node.NodeInfo) *Massage {
+	msgReturn := Massage{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Massage = "Purge"
+	msgReturn.MassageType = Purge
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = *new(node.NodeInfo)
+
+	msgReturn.Route = []int{sender.Id}
 
 	return &msgReturn
 }
