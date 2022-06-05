@@ -1,7 +1,7 @@
 {
-    "ipAddress":"172.23.134.91",
+    "ipAddress":"172.23.143.180",
     "port":9002,
-    "bootstrapIpAddress": "172.23.134.91",
+    "bootstrapIpAddress": "172.23.143.180",
     "bootstrapPort":7777,
     "jobs": [{"name":"Jobo","pointCount":5,"p":0.4,"width":1000,"height":1000},{"name":"Jabo","pointCount":10,"p":0.1,"width":1000,"height":1000}]
 }

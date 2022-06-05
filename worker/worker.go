@@ -47,8 +47,9 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerNode.Port = port
 
 	WorkerNode.SystemInfo = make(map[int]node.NodeInfo)
-
+	allJobs = make([]job.Job, len(jobs))
 	copy(allJobs, jobs)
+	fmt.Printf("\nWut: %v\n", allJobs)
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
@@ -64,13 +65,15 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerEnteredChannel = make(chan int, 1)
 	EnterenceChannel <- 1
 
-	LogFileChan = make(chan string)
-	LogErrorChan = make(chan string)
+	LogFileChan = make(chan string, 15)
+	LogErrorChan = make(chan string, 15)
 
 	ListenChan := make(chan int32)
 
 	WritenFile := chanfile.ChanFile{File: LogFile, InputChan: LogFileChan}
 	ErrorWritenFile := chanfile.ChanFile{File: ErrorFile, InputChan: LogErrorChan}
+
+	LogFileChan <- fmt.Sprintf("%v", jobs)
 
 	go ErrorWritenFile.WriteFileFromChan()
 	go WritenFile.WriteFileFromChan()
@@ -188,12 +191,16 @@ func proccesWelcomeMassage(msgStruct massage.Massage) {
 
 	for kstr, v := range SystemInfoRecived {
 		k, _ := strconv.Atoi(kstr)
-		mapstructure.Decode(v, WorkerNode.SystemInfo[k])
-		// WorkerNode.SystemInfo[k]
+		var tmpNI node.NodeInfo
+		mapstructure.Decode(v, &tmpNI)
+		fmt.Printf("LOLOL: %v %v\n", v, tmpNI.String())
+		WorkerNode.SystemInfo[k] = tmpNI
 	}
 	WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
 
 	LogFileChan <- fmt.Sprintf("Finnaly entered system with id %d ", WorkerNode.Id)
+
+	LogFileChan <- fmt.Sprintf("System info: %v", WorkerNode.SystemInfo)
 
 	toSend := massage.MakeEnteredMassage(WorkerNode)
 	go broadcastMassage(&WorkerNode, toSend)

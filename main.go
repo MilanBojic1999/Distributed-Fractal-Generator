@@ -2,11 +2,14 @@ package main
 
 import (
 	"distributed/bootstrap"
+	"distributed/job"
 	"distributed/worker"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 func check(e error, addition string) {
@@ -39,9 +42,10 @@ func main() {
 		bootstrap.RunBootstrap(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), *FILE_SEPARATOR)
 	} else {
 
+		var JobList []job.Job
 		jobs_interface := bootMap["jobs"]
-		jobs := jobs_interface.([]interface{})
-		fmt.Printf("%v ¦¦¦¦ %T\n", jobs[0], jobs[0])
-		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), nil, *FILE_SEPARATOR)
+		mapstructure.Decode(jobs_interface, &JobList)
+		fmt.Println(JobList)
+		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), JobList, *FILE_SEPARATOR)
 	}
 }
