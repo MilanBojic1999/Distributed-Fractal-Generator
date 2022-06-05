@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"bufio"
 	chanfile "distributed/chainfile"
-	"distributed/massage"
+	"distributed/message"
 	"distributed/node"
 	"encoding/json"
 	"fmt"
@@ -99,9 +99,9 @@ func listenOnPort(listenChan chan int32) {
 					ln.SetDeadline(time.Now().Add(10 * time.Second))
 				}
 			} else {
-				var msgStruct massage.Massage
+				var msgStruct message.Message
 				json.NewDecoder(inMsg).Decode(&msgStruct)
-				processRecivedMassage(msgStruct)
+				processRecivedMessage(msgStruct)
 
 				inMsg.Close()
 			}
@@ -110,42 +110,42 @@ func listenOnPort(listenChan chan int32) {
 	}
 }
 
-func processRecivedMassage(msgStruct massage.Massage) {
+func processRecivedMessage(msgStruct message.Message) {
 
 	LogFileChan <- "Finally Recived " + msgStruct.Log()
 
-	switch msgStruct.MassageType {
-	case massage.Hail:
-		go proccesHailMassage(msgStruct)
-	case massage.Join:
-		go proccesJoinMassage(msgStruct)
-	case massage.Leave:
-		go proccesLeaveMassage(msgStruct)
+	switch msgStruct.MessageType {
+	case message.Hail:
+		go proccesHailMessage(msgStruct)
+	case message.Join:
+		go proccesJoinMessage(msgStruct)
+	case message.Leave:
+		go proccesLeaveMessage(msgStruct)
 
 	}
 
 }
 
-func proccesHailMassage(msg massage.Massage) {
+func proccesHailMessage(msg message.Message) {
 
 	<-EnterenceChannel // ulazimo u kriticnu sekciju
-	var toSend *massage.Massage
+	var toSend *message.Message
 	fmt.Println(len(BootstrapNode.Workers))
 	if len(BootstrapNode.Workers) == 0 {
-		toSend = massage.MakeContactMassage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), node.NodeInfo{Id: -1, IpAddress: "rafhost", Port: -10})
+		toSend = message.MakeContactMessage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), node.NodeInfo{Id: -1, IpAddress: "rafhost", Port: -10})
 	} else {
-		toSend = massage.MakeContactMassage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
+		toSend = message.MakeContactMessage(*BootstrapNode.GetNodeInfo(), msg.GetSender(), BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
 	}
-	fmt.Println(toSend.Massage)
+	fmt.Println(toSend.Message)
 	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
 	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
 }
 
-func proccesJoinMassage(msg massage.Massage) {
+func proccesJoinMessage(msg message.Message) {
 	BootstrapNode.Workers = append(BootstrapNode.Workers, msg.OriginalSender)
 }
 
-func proccesLeaveMassage(msg massage.Massage) {
+func proccesLeaveMessage(msg message.Message) {
 	BootstrapTableMutex.Lock()
 	defer BootstrapTableMutex.Unlock()
 
@@ -166,7 +166,7 @@ func proccesLeaveMassage(msg massage.Massage) {
 	BootstrapNode.Workers = BootstrapNode.Workers[:len(BootstrapNode.Workers)-1]
 }
 
-func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {
+func sendMessage(sender, reciver *node.NodeInfo, msg *message.Message) bool {
 	connOut, err := net.DialTimeout("tcp", reciver.GetFullAddress(), time.Duration(1)*time.Second)
 	if err != nil {
 		if _, ok := err.(net.Error); ok {
@@ -182,7 +182,7 @@ func sendMessage(sender, reciver *node.NodeInfo, msg *massage.Massage) bool {
 	return true
 }
 
-func systemBroadcastMassage(msg *massage.Massage) {
+func systemBroadcastMessage(msg *message.Message) {
 	for _, v := range BootstrapNode.Workers {
 		sendMessage(BootstrapNode.GetNodeInfo(), &v, msg)
 	}
@@ -201,8 +201,8 @@ func parseCommand(commandArg string) bool {
 		time.Sleep(time.Second)
 		return false
 	} else if strings.EqualFold(command, "purge") {
-		toSend := massage.MakePurgeMassage(*BootstrapNode.GetNodeInfo())
-		go systemBroadcastMassage(toSend)
+		toSend := message.MakePurgeMessage(*BootstrapNode.GetNodeInfo())
+		go systemBroadcastMessage(toSend)
 		ListenPortListenChan <- 1
 		return false
 	} else {
