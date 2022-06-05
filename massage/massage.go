@@ -157,11 +157,12 @@ func MakeHailMassage(sender node.Worker, reciver node.Bootstrap) *Massage {
 	return &msgReturn
 }
 
-func MakeContactMassage(sender node.Bootstrap, reciver node.NodeInfo) *Massage {
+func MakeContactMassage(sender node.Bootstrap, reciver, contact node.NodeInfo) *Massage {
 	msgReturn := Massage{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Massage = "Contact"
+	contact_byte, _ := json.Marshal(contact)
+	msgReturn.Massage = string(contact_byte)
 	msgReturn.MassageType = Contact
 
 	msgReturn.OriginalSender = *sender.GetNodeInfo()

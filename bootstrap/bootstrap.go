@@ -30,7 +30,7 @@ var BootstrapTableMutex sync.Mutex
 
 func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
-	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 10)}
+	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 0, 10)}
 
 	EnterenceChannel = make(chan int, 1)
 	EnterenceChannel <- 1
@@ -122,12 +122,13 @@ func proccesHailMassage(msg massage.Massage) {
 
 	<-EnterenceChannel // ulazimo u kriticnu sekciju
 	var toSend *massage.Massage
+	fmt.Println(len(BootstrapNode.Workers))
 	if len(BootstrapNode.Workers) == 0 {
-		toSend = massage.MakeContactMassage(BootstrapNode, node.NodeInfo{Id: -1, IpAddress: "", Port: 0})
-
+		toSend = massage.MakeContactMassage(BootstrapNode, msg.GetSender(), node.NodeInfo{Id: -1, IpAddress: "rafhost", Port: -10})
 	} else {
-		toSend = massage.MakeContactMassage(BootstrapNode, BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
+		toSend = massage.MakeContactMassage(BootstrapNode, msg.GetSender(), BootstrapNode.Workers[len(BootstrapNode.Workers)-1])
 	}
+	fmt.Println(toSend.Massage)
 	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
 	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
 }

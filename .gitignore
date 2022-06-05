@@ -13,3 +13,12 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+files/*/output/*
+files/*/error/*
+
+files/output/*
+files/error/*
+
+/*.bash
+./*sh

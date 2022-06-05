@@ -2,7 +2,6 @@ package main
 
 import (
 	"distributed/bootstrap"
-	"distributed/job"
 	"distributed/worker"
 	"encoding/json"
 	"flag"
@@ -19,7 +18,7 @@ func check(e error, addition string) {
 
 func main() {
 
-	FILE_SEPARATOR := flag.String("fileSeparator", "\\", "File seperator \\ for Windows (/ for Linux)")
+	FILE_SEPARATOR := flag.String("fileSeperator", "\\", "File seperator \\ for Windows (/ for Linux)")
 	systemFile := flag.String("systemFile", "files"+*FILE_SEPARATOR+"system", "Path to file that describes system")
 	isBootstrap := flag.Bool("bootstrap", false, "Is node a bootstrap")
 
@@ -34,9 +33,15 @@ func main() {
 	}
 	json.Unmarshal(dat, &bootMap)
 
+	fmt.Println(bootMap)
+
 	if *isBootstrap {
-		bootstrap.RunBootstrap(bootMap["ipAddress"].(string), bootMap["port"].(int), *FILE_SEPARATOR)
+		bootstrap.RunBootstrap(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), *FILE_SEPARATOR)
 	} else {
-		worker.RunWorker(bootMap["ipAddress"].(string), bootMap["port"].(int), bootMap["bootstrapIpAddress"].(string), bootMap["bootstrapPort"].(int), bootMap["jobs"].([]job.Job), *FILE_SEPARATOR)
+
+		jobs_interface := bootMap["jobs"]
+		jobs := jobs_interface.([]interface{})
+		fmt.Printf("%v ¦¦¦¦ %T\n", jobs[0], jobs[0])
+		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), nil, *FILE_SEPARATOR)
 	}
 }

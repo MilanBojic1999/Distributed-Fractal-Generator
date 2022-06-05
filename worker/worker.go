@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 func check(e error, addition string) {
@@ -37,20 +40,22 @@ var WorkerNode node.Worker
 
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
 
-	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 1)}
+	BootstrapNode = node.Bootstrap{IpAddress: bootstrapIpAddres, Port: bootstrapPort, Workers: make([]node.NodeInfo, 1)}
 
 	WorkerNode = node.Worker{}
 	WorkerNode.IpAddress = ipAddres
 	WorkerNode.Port = port
 
+	WorkerNode.SystemInfo = make(map[int]node.NodeInfo)
+
 	copy(allJobs, jobs)
 
-	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sbootstrapLog.log", FILE_SEPARATOR, FILE_SEPARATOR))
+	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
 		check(err, "LogFile")
 	}
 
-	ErrorFile, err := os.Create(fmt.Sprintf("files%serror%sbootstrapError.log", FILE_SEPARATOR, FILE_SEPARATOR))
+	ErrorFile, err := os.Create(fmt.Sprintf("files%serror%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
 		check(err, "LogFile")
 	}
@@ -77,10 +82,15 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 
 	<-WorkerEnteredChannel // we wait to enter to system
 
+	LogFileChan <- "Worker is working"
+
+	time.Sleep(time.Second * 15)
+	fmt.Println(WorkerNode.SystemInfo)
+
 }
 
 func listenOnPort(listenChan chan int32) {
-	laddr, err := net.ResolveTCPAddr("tcp", BootstrapNode.GetFullAddress())
+	laddr, err := net.ResolveTCPAddr("tcp", WorkerNode.GetFullAddress())
 	if err != nil {
 		fmt.Println(err)
 		check(err, "ResolveTCPAddr")
@@ -121,6 +131,9 @@ func listenOnPort(listenChan chan int32) {
 }
 
 func processRecivedMassage(msgStruct massage.Massage) {
+
+	LogFileChan <- "Finally Recived " + msgStruct.Log()
+
 	switch msgStruct.MassageType {
 	case massage.Contact:
 		go proccesContactMassage(msgStruct)
@@ -138,12 +151,14 @@ func proccesContactMassage(msgStruct massage.Massage) {
 	var ContactInfo node.NodeInfo
 
 	json.Unmarshal([]byte(msgStruct.GetMassage()), &ContactInfo)
+
 	if ContactInfo.Id == -1 {
 		WorkerNode.Id = 0
 		toSend := massage.MakeJoinMassage(WorkerNode, BootstrapNode)
 		LogFileChan <- "Entered system with id 0. I'm the first one"
 
 		go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSend)
+		WorkerNode.SystemInfo[0] = *WorkerNode.GetNodeInfo()
 		WorkerEnteredChannel <- 1
 	} else {
 		knockMassage := massage.MakeSystemKnockMassage(WorkerNode, ContactInfo)
@@ -158,21 +173,23 @@ func proccesWelcomeMassage(msgStruct massage.Massage) {
 
 	json.Unmarshal([]byte(msgStruct.GetMassage()), &msgMap)
 
-	newNodeId, ok := msgMap["id"].(int)
+	newNodeId, ok := msgMap["id"].(float64)
 	if !ok {
-		LogErrorChan <- fmt.Sprintf("Wrong massage given: %s", msgStruct.GetMassage())
+		LogErrorChan <- fmt.Sprintf("¦1¦Wrong massage recived: %s", msgStruct.GetMassage())
 		return
 	}
-	WorkerNode.Id = newNodeId
+	WorkerNode.Id = int(newNodeId)
+	SystemInfoRecived := msgMap["systemInfo"].(map[string]interface{})
 
-	SystemInfoRecived, ok := msgMap["systemInfo"].(map[int]node.NodeInfo)
 	if !ok {
-		LogErrorChan <- fmt.Sprintf("Wrong massage given: %s", msgStruct.GetMassage())
+		LogErrorChan <- fmt.Sprintf("¦2¦Wrong massage recived: %s", msgStruct.GetMassage())
 		return
 	}
 
-	for k, v := range SystemInfoRecived {
-		WorkerNode.SystemInfo[k] = v
+	for kstr, v := range SystemInfoRecived {
+		k, _ := strconv.Atoi(kstr)
+		mapstructure.Decode(v, WorkerNode.SystemInfo[k])
+		// WorkerNode.SystemInfo[k]
 	}
 	WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
 
