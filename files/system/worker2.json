@@ -1,10 +1,11 @@
 {
-    "ipAddress":"172.23.143.180",
+    "ipAddress":"172.23.142.205",
     "port":9002,
-    "bootstrapIpAddress": "172.23.143.180",
+    "bootstrapIpAddress": "172.23.142.205",
     "bootstrapPort":7777,
-    "jobs": [{"name":"Jobo","pointCount":3,"p":0.4,"width":1000,"height":1000,"mainPoints":[{"x":0,"y":0},{"x":1,"y":2},{"x":1,"y":4}]},
-    {"name":"Jabo4","pointCount":4,"p":0.1,"width":1000,"height":1000,"mainPoints":[{"x":0,"y":0},{"x":1,"y":2},{"x":10,"y":20},{"x":1,"y":3}]}]
+    "jobs": [{"name":"Jobo","pointCount":3,"ratio":"0.5","width":100,"height":100,"mainPoints":[{"x":10,"y":10},{"x":10,"y":90},{"x":95,"y":90}]},
+    {"name":"job0","pointCount":4,"ratio":"0.5","width":250,"height":250,"mainPoints":[{"x":10,"y":10},{"x":10,"y":150},{"x":200,"y":10},{"x":200,"y":150}]}]
+
 }
 
 

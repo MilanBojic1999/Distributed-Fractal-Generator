@@ -13,12 +13,11 @@ import (
 type Job struct {
 	Name       string             `json:"name"`
 	PointCount int                `json:"pointCount"`
-	Ration     float32            `json:"p"`
+	Ration     float64            `json:"ratio"`
 	Width      int                `json:"width"`
 	Height     int                `json:"height"`
 	MainPoints []structures.Point `json:"mainPoints"`
 	Points     []structures.Point `json:"-"`
-	working    bool               `json:"-"`
 }
 
 func (job *Job) MakeImage(path string) {
@@ -27,11 +26,15 @@ func (job *Job) MakeImage(path string) {
 
 	img := image.NewRGBA(image.Rect(0, 0, job.Width, job.Height))
 
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.White}, image.ZP, draw.Src)
+	draw.Draw(img, img.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
+
+	fmt.Printf("Number of new points: %d\n", len(job.Points))
 
 	for _, p := range job.Points {
 		img.Set(p.X, p.Y, color.Black)
 	}
+
+	fmt.Println(job.MainPoints)
 
 	for _, p := range job.MainPoints {
 		img.Set(p.X, p.Y, red)

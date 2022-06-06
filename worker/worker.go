@@ -45,11 +45,14 @@ var WorkerTableMutex sync.Mutex
 var WorkerEnterenceMutex sync.Mutex
 var ConnectionWaitGroup sync.WaitGroup
 
-var allJobs map[string]job.Job
+var allJobs map[string]*job.Job
 
 var WorkerNode node.Worker
 
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
+
+	LogFileChan = make(chan string, 15)
+	LogErrorChan = make(chan string, 15)
 
 	BootstrapNode = node.Bootstrap{IpAddress: bootstrapIpAddres, Port: bootstrapPort, Workers: make([]node.NodeInfo, 1)}
 
@@ -58,13 +61,22 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerNode.Port = port
 
 	WorkerNode.SystemInfo = make(map[int]node.NodeInfo)
+	fmt.Printf("\nWut: %v\n", jobs)
+
+	allJobs = make(map[string]*job.Job)
 
 	for _, v := range jobs {
-		if v, ok := allJobs[v.Name]; !ok {
+		fmt.Printf("Job: %v\n", v)
+
+		if _, ok := allJobs[v.Name]; ok {
 			LogErrorChan <- fmt.Sprintf("Job already exist: %v", v)
+			fmt.Printf("Job already exist: %v\n", v)
 			continue
 		}
-		allJobs[v.Name] = v
+		vv := v
+		vv.Ration = 0.5
+
+		allJobs[vv.Name] = &vv
 	}
 
 	fmt.Printf("\nWut: %v\n", allJobs)
@@ -83,12 +95,9 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerEnteredChannel = make(chan int, 1)
 	EnterenceChannel <- 1
 
-	LogFileChan = make(chan string, 15)
-	LogErrorChan = make(chan string, 15)
-
 	ListenPortListenChan = make(chan int32, 2)
 	CommandPortListenChan = make(chan int32, 2)
-	JobProccesingPoisonChan = make(chan int32)
+	JobProccesingPoisonChan = make(chan int32, 2)
 
 	WritenFile := chanfile.ChanFile{File: LogFile, InputChan: LogFileChan}
 	ErrorWritenFile := chanfile.ChanFile{File: ErrorFile, InputChan: LogErrorChan}
@@ -361,28 +370,31 @@ func broadcastMessage(sender *node.Worker, msg message.IMessage) bool {
 	return result
 }
 
-func nextPoint(start, end structures.Point, ratio float32) structures.Point {
-	new_x := int(float32(start.X)*ratio + (1-ratio)*float32(end.X))
-	new_y := int(float32(start.Y)*ratio + (1-ratio)*float32(end.Y))
-
-	return structures.Point{X: new_x, Y: new_y}
+func nextPoint(start, end structures.Point, ratio float64) structures.Point {
+	new_x := (float64(start.X)*ratio + (1-ratio)*float64(end.X))
+	new_y := (float64(start.Y)*ratio + (1-ratio)*float64(end.Y))
+	// LogFileChan <- fmt.Sprintf("Float Points: %.2f %.2f (%.3f)", new_x, new_y, ratio)
+	return structures.Point{X: int(new_x), Y: int(new_y)}
 }
 
-func startJob(job job.Job) {
+func startJob(job *job.Job) {
 	point := job.MainPoints[0]
 	for {
 		select {
 		case <-JobProccesingPoisonChan:
 			LogFileChan <- "Ending job:" + job.Name
+			return
 		default:
 			indPoint := rand.Intn(job.PointCount)
 			point = nextPoint(point, job.MainPoints[indPoint], job.Ration)
+			// LogFileChan <- fmt.Sprintf("New point: %v to Main point: %v", point, job.MainPoints[indPoint])
 			job.Points = append(job.Points, point)
 		}
+		time.Sleep(time.Millisecond * 10)
 	}
 }
 
-func AskForNewJob(name string) job.Job {
+func AskForNewJob(name string) *job.Job {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Number of points	:> ")
 	text, _ := reader.ReadString('\n')
@@ -390,6 +402,7 @@ func AskForNewJob(name string) job.Job {
 	if err != nil {
 		check(err, "PointCount")
 	}
+	fmt.Println(pointCount, " ", text)
 	points := make([]structures.Point, pointCount)
 	for i := 0; i < pointCount; i++ {
 		fmt.Printf("Point %d	:> ", i)
@@ -428,21 +441,41 @@ func AskForNewJob(name string) job.Job {
 	newJob.PointCount = pointCount
 	newJob.Height = height
 	newJob.Width = width
-	newJob.Ration = float32(ration)
+	newJob.Ration = float64(ration)
 	copy(newJob.MainPoints, points)
 	newJob.Points = make([]structures.Point, 1)
 
-	return *newJob
+	return newJob
 }
 
-func pareseStartJob(name string) {
-
+func parseStartJob(name string) {
+	LogFileChan <- "Starting job: " + name
 	job, ok := allJobs[name]
 	if !ok {
+		LogFileChan <- "There is no job: " + name + ". Creating new job"
 		job = AskForNewJob(name)
 		allJobs[name] = job
 	}
-	startJob(job)
+	go startJob(job)
+}
+
+func parseResultJob(args string) {
+	LogFileChan <- "Result getting: " + args
+	args_array := strings.SplitN(args, " ", 2)
+	var name, fractalID string
+	name = args_array[0]
+	fractalID = ""
+	if len(args_array) == 2 {
+		fractalID = args_array[1]
+		LogFileChan <- "KOJO " + fractalID
+	}
+
+	job, ok := allJobs[name]
+	if !ok {
+		LogErrorChan <- "There is no job: " + name
+		return
+	}
+	job.MakeImage(IMAGE_PATH)
 }
 
 func parseCommand(commandArg string) bool {
@@ -455,7 +488,9 @@ func parseCommand(commandArg string) bool {
 		time.Sleep(time.Second)
 		return false
 	} else if strings.EqualFold(command, "start") {
-		pareseStartJob(command_arr[1])
+		parseStartJob(command_arr[1])
+	} else if strings.EqualFold(command, "result") {
+		parseResultJob(command_arr[1])
 	} else {
 		fmt.Printf("Unknown command: %s\n", command)
 	}

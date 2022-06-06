@@ -45,7 +45,7 @@ func main() {
 		var JobList []job.Job
 		jobs_interface := bootMap["jobs"]
 		mapstructure.Decode(jobs_interface, &JobList)
-		fmt.Println(JobList)
+		fmt.Printf("%T %v\n", jobs_interface, jobs_interface)
 		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), JobList, *FILE_SEPARATOR)
 	}
 }

@@ -50,8 +50,8 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 		check(err, "LogFile")
 	}
 
-	LogFileChan = make(chan string)
-	LogErrorChan = make(chan string)
+	LogFileChan = make(chan string, 15)
+	LogErrorChan = make(chan string, 15)
 
 	ListenPortListenChan = make(chan int32)
 	CommandPortListenChan = make(chan int32)
