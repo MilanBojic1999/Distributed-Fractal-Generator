@@ -50,3 +50,13 @@ func (mm *ModMath) NextOne(input string) string {
 
 	return string(outArray)
 }
+
+func (mm *ModMath) ModToInt(input string) int {
+
+	output := 0
+	for _, ar := range input {
+		output = output*int(mm.N) + int(ar-'0')
+	}
+
+	return output
+}

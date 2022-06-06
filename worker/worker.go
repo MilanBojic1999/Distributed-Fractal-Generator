@@ -6,8 +6,10 @@ import (
 	"distributed/job"
 	"distributed/message"
 	"distributed/node"
+	"distributed/structures"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -25,11 +27,14 @@ func check(e error, addition string) {
 	}
 }
 
+const IMAGE_PATH = "files/images"
+
 var LogFileChan chan string
 var LogErrorChan chan string
 
 var ListenPortListenChan chan int32
 var CommandPortListenChan chan int32
+var JobProccesingPoisonChan chan int32
 
 var BootstrapNode node.Bootstrap
 
@@ -83,6 +88,7 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 
 	ListenPortListenChan = make(chan int32, 2)
 	CommandPortListenChan = make(chan int32, 2)
+	JobProccesingPoisonChan = make(chan int32)
 
 	WritenFile := chanfile.ChanFile{File: LogFile, InputChan: LogFileChan}
 	ErrorWritenFile := chanfile.ChanFile{File: ErrorFile, InputChan: LogErrorChan}
@@ -355,6 +361,90 @@ func broadcastMessage(sender *node.Worker, msg message.IMessage) bool {
 	return result
 }
 
+func nextPoint(start, end structures.Point, ratio float32) structures.Point {
+	new_x := int(float32(start.X)*ratio + (1-ratio)*float32(end.X))
+	new_y := int(float32(start.Y)*ratio + (1-ratio)*float32(end.Y))
+
+	return structures.Point{X: new_x, Y: new_y}
+}
+
+func startJob(job job.Job) {
+	point := job.MainPoints[0]
+	for {
+		select {
+		case <-JobProccesingPoisonChan:
+			LogFileChan <- "Ending job:" + job.Name
+		default:
+			indPoint := rand.Intn(job.PointCount)
+			point = nextPoint(point, job.MainPoints[indPoint], job.Ration)
+			job.Points = append(job.Points, point)
+		}
+	}
+}
+
+func AskForNewJob(name string) job.Job {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Number of points	:> ")
+	text, _ := reader.ReadString('\n')
+	pointCount, err := strconv.Atoi(text)
+	if err != nil {
+		check(err, "PointCount")
+	}
+	points := make([]structures.Point, pointCount)
+	for i := 0; i < pointCount; i++ {
+		fmt.Printf("Point %d	:> ", i)
+		text, _ = reader.ReadString('\n')
+		text_arr := strings.SplitN(text, " ", 2)
+		xstr, ystr := text_arr[0], text_arr[1]
+		x, _ := strconv.Atoi(xstr)
+		y, _ := strconv.Atoi(ystr)
+		pp := structures.Point{X: x, Y: y}
+		points[i] = pp
+	}
+
+	fmt.Print("Ratio	:> ")
+	text, _ = reader.ReadString('\n')
+	ration, err := strconv.ParseFloat(text, 32)
+	if err != nil {
+		check(err, "Ratio")
+	}
+
+	fmt.Print("Height	:> ")
+	text, _ = reader.ReadString('\n')
+	height, err := strconv.Atoi(text)
+	if err != nil {
+		check(err, "Height")
+	}
+
+	fmt.Print("Width	:> ")
+	text, _ = reader.ReadString('\n')
+	width, err := strconv.Atoi(text)
+	if err != nil {
+		check(err, "Width")
+	}
+
+	newJob := new(job.Job)
+	newJob.Name = name
+	newJob.PointCount = pointCount
+	newJob.Height = height
+	newJob.Width = width
+	newJob.Ration = float32(ration)
+	copy(newJob.MainPoints, points)
+	newJob.Points = make([]structures.Point, 1)
+
+	return *newJob
+}
+
+func pareseStartJob(name string) {
+
+	job, ok := allJobs[name]
+	if !ok {
+		job = AskForNewJob(name)
+		allJobs[name] = job
+	}
+	startJob(job)
+}
+
 func parseCommand(commandArg string) bool {
 
 	command_arr := strings.SplitN(commandArg, " ", 2)
@@ -364,10 +454,13 @@ func parseCommand(commandArg string) bool {
 		ListenPortListenChan <- 1
 		time.Sleep(time.Second)
 		return false
+	} else if strings.EqualFold(command, "start") {
+		pareseStartJob(command_arr[1])
 	} else {
 		fmt.Printf("Unknown command: %s\n", command)
-		return true
 	}
+	return true
+
 }
 
 func listenCommand(listenChan chan int32) {

@@ -17,8 +17,11 @@
 files/*/output/*
 files/*/error/*
 
+
+
 files/output/*
 files/error/*
+files/images/*
 
 /*.bash
 ./*sh
