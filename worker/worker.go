@@ -74,12 +74,10 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 			continue
 		}
 		vv := v
-		vv.Ration = 0.5
-
 		allJobs[vv.Name] = &vv
 	}
 
-	fmt.Printf("\nWut: %v\n", allJobs)
+	fmt.Printf("\nWut2: %v\n", allJobs)
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
