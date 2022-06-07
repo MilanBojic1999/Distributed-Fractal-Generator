@@ -396,15 +396,47 @@ func AskForNewJob(name string) *job.Job {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Number of points	:> ")
 	text, _ := reader.ReadString('\n')
+	text = strings.Replace(text, "\n", "", -1)
+
 	pointCount, err := strconv.Atoi(text)
 	if err != nil {
 		check(err, "PointCount")
 	}
 	fmt.Println(pointCount, " ", text)
+
+	fmt.Print("Ratio	:> ")
+	text, _ = reader.ReadString('\n')
+	text = strings.Replace(text, "\n", "", -1)
+
+	ration, err := strconv.ParseFloat(text, 32)
+	if err != nil {
+		check(err, "Ratio")
+	}
+
+	fmt.Print("Height	:> ")
+	text, _ = reader.ReadString('\n')
+	text = strings.Replace(text, "\n", "", -1)
+
+	height, err := strconv.Atoi(text)
+	if err != nil {
+		check(err, "Height")
+	}
+
+	fmt.Print("Width	:> ")
+	text, _ = reader.ReadString('\n')
+	text = strings.Replace(text, "\n", "", -1)
+
+	width, err := strconv.Atoi(text)
+	if err != nil {
+		check(err, "Width")
+	}
+
 	points := make([]structures.Point, pointCount)
 	for i := 0; i < pointCount; i++ {
 		fmt.Printf("Point %d	:> ", i)
 		text, _ = reader.ReadString('\n')
+		text = strings.Replace(text, "\n", "", -1)
+
 		text_arr := strings.SplitN(text, " ", 2)
 		xstr, ystr := text_arr[0], text_arr[1]
 		x, _ := strconv.Atoi(xstr)
@@ -413,34 +445,13 @@ func AskForNewJob(name string) *job.Job {
 		points[i] = pp
 	}
 
-	fmt.Print("Ratio	:> ")
-	text, _ = reader.ReadString('\n')
-	ration, err := strconv.ParseFloat(text, 32)
-	if err != nil {
-		check(err, "Ratio")
-	}
-
-	fmt.Print("Height	:> ")
-	text, _ = reader.ReadString('\n')
-	height, err := strconv.Atoi(text)
-	if err != nil {
-		check(err, "Height")
-	}
-
-	fmt.Print("Width	:> ")
-	text, _ = reader.ReadString('\n')
-	width, err := strconv.Atoi(text)
-	if err != nil {
-		check(err, "Width")
-	}
-
 	newJob := new(job.Job)
 	newJob.Name = name
 	newJob.PointCount = pointCount
 	newJob.Height = height
 	newJob.Width = width
 	newJob.Ration = float64(ration)
-	copy(newJob.MainPoints, points)
+	newJob.MainPoints = points
 	newJob.Points = make([]structures.Point, 1)
 
 	return newJob
