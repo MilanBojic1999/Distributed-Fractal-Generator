@@ -1,6 +1,7 @@
 package message
 
 import (
+	"distributed/job"
 	"distributed/node"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,9 @@ const (
 	ImageInfo                 MessageType = 17
 	SystemKnock               MessageType = 18
 	Purge                     MessageType = 19
+	ShareJob                  MessageType = 20
+	StartJob                  MessageType = 21
+	ApproachCluster           MessageType = 22
 )
 
 type MessageCounter struct {
@@ -248,9 +252,9 @@ func MakeEnteredMessage(sender node.NodeInfo) *Message {
 	msgReturn.MessageType = Entered
 
 	msgReturn.OriginalSender = sender
-	reciver := new(node.NodeInfo)
-	reciver.Id = -1
-	msgReturn.Reciver = *reciver
+	tmpReciver := new(node.NodeInfo)
+	tmpReciver.Id = -1
+	msgReturn.Reciver = *tmpReciver
 
 	msgReturn.Route = []int{sender.Id}
 
@@ -302,7 +306,9 @@ func MakeQuitMessage(sender node.NodeInfo) *Message {
 	msgReturn.MessageType = Quit
 
 	msgReturn.OriginalSender = sender
-	msgReturn.Reciver = *new(node.NodeInfo)
+	tmpReciver := new(node.NodeInfo)
+	tmpReciver.Id = -1
+	msgReturn.Reciver = *tmpReciver
 
 	msgReturn.Route = []int{sender.Id}
 
@@ -421,8 +427,58 @@ func MakePurgeMessage(sender node.NodeInfo) *Message {
 	msgReturn.Message = "Purge"
 	msgReturn.MessageType = Purge
 
+	tmpReciver := new(node.NodeInfo)
+	tmpReciver.Id = -1
+	msgReturn.Reciver = *tmpReciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeShereJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	jsonstr, _ := json.Marshal(jobInput)
+	msgReturn.Message = string(jsonstr)
+	msgReturn.MessageType = ShareJob
+
 	msgReturn.OriginalSender = sender
-	msgReturn.Reciver = *new(node.NodeInfo)
+	tmpReciver := new(node.NodeInfo)
+	tmpReciver.Id = -1
+	msgReturn.Reciver = *tmpReciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeStartJobMessage(sender, reciver node.NodeInfo, jobName string) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Message = jobName
+	msgReturn.MessageType = StartJob
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeApproachClusterMessage(sender, reciver, contact node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	jsonstr, _ := json.Marshal(contact)
+	msgReturn.Message = string(jsonstr)
+	msgReturn.MessageType = ApproachCluster
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
 
 	msgReturn.Route = []int{sender.Id}
 

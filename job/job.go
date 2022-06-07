@@ -18,6 +18,7 @@ type Job struct {
 	Height     int                `json:"height"`
 	MainPoints []structures.Point `json:"mainPoints"`
 	Points     []structures.Point `json:"-"`
+	Working    bool               `json:"-"`
 }
 
 func (job *Job) MakeImage(path string) {

@@ -27,6 +27,16 @@ func check(e error, addition string) {
 	}
 }
 
+func partOfSlice(route []int, nodeId int) bool {
+	for _, v := range route {
+		if v == nodeId {
+			return true
+		}
+	}
+
+	return false
+}
+
 const IMAGE_PATH = "files/images"
 
 var LogFileChan chan string
@@ -47,6 +57,9 @@ var ConnectionWaitGroup sync.WaitGroup
 
 var allJobs map[string]*job.Job
 
+var workingJob *job.Job
+var workingJobsInSystem int
+
 var WorkerNode node.Worker
 
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
@@ -64,6 +77,8 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	fmt.Printf("\nWut: %v\n", jobs)
 
 	allJobs = make(map[string]*job.Job)
+	workingJob = nil
+	workingJobsInSystem = 0
 
 	for _, v := range jobs {
 		fmt.Printf("Job: %v\n", v)
@@ -166,24 +181,54 @@ func listenOnPort(listenChan chan int32) {
 }
 
 func processRecivedMessage(msgStruct message.Message) {
+	if msgStruct.GetReciver().Id == WorkerNode.GetId() {
+		LogFileChan <- "Finally Recived " + msgStruct.Log()
 
-	LogFileChan <- "Finally Recived " + msgStruct.Log()
+		switch msgStruct.MessageType {
+		case message.Contact:
+			go proccesContactMessage(msgStruct)
+		case message.Welcome:
+			go proccesWelcomeMessage(msgStruct)
+		case message.Entered:
+			go proccesEnteredMessage(msgStruct)
+		case message.SystemKnock:
+			go proccesSystemKnockMessage(msgStruct)
+		case message.ConnectionRequest:
+			go proccesConnectionRequest(msgStruct)
+		case message.ConnectionResponse:
+			go proccesConnectionResponse(msgStruct)
+		case message.JobSharing:
+			go proccesJobSharing(msgStruct)
+		}
+	} else {
+		broadcastnext := false
+		switch msgStruct.MessageType {
+		case message.Entered:
+			go proccesEnteredMessage(msgStruct)
+			broadcastnext = true
+		case message.Purge:
+			go proccesPurgeResponse(msgStruct)
+			broadcastnext = true
 
-	switch msgStruct.MessageType {
-	case message.Contact:
-		go proccesContactMessage(msgStruct)
-	case message.Welcome:
-		go proccesWelcomeMessage(msgStruct)
-	case message.Entered:
-		go proccesEnteredMessage(msgStruct)
-	case message.SystemKnock:
-		go proccesSystemKnockMessage(msgStruct)
-	case message.ConnectionRequest:
-		go proccesConnectionRequest(msgStruct)
-	case message.ConnectionResponse:
-		go proccesConnectionResponse(msgStruct)
-	case message.Purge:
-		go proccesPurgeResponse(msgStruct)
+		case message.ShareJob:
+			go proccesEnteredMessage(msgStruct)
+			broadcastnext = true
+
+		case message.Quit:
+			go proccesEnteredMessage(msgStruct)
+			broadcastnext = true
+
+		}
+		if broadcastnext {
+			if partOfSlice(msgStruct.Route, WorkerNode.Id) {
+				LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
+			} else {
+				newMsg := msgStruct.MakeMeASender(&WorkerNode)
+				LogFileChan <- fmt.Sprintf("Recived but ain't for me: %s \\ Broadcasting", msgStruct.Log())
+				broadcastMessage(&WorkerNode, newMsg)
+			}
+		}
+
 	}
 }
 
@@ -205,7 +250,6 @@ func proccesContactMessage(msgStruct message.Message) {
 		knockMessage := message.MakeSystemKnockMessage(*WorkerNode.GetNodeInfo(), ContactInfo)
 		sendMessage(WorkerNode.GetNodeInfo(), &ContactInfo, knockMessage)
 	}
-
 }
 
 func proccesWelcomeMessage(msgStruct message.Message) {
@@ -323,6 +367,19 @@ func proccesPurgeResponse(msgStruct message.Message) {
 	CommandPortListenChan <- 1
 	ListenPortListenChan <- 1
 	LogFileChan <- "System purge"
+}
+
+func proccesJobSharing(msgStruct message.Message) {
+
+	var newJob job.Job
+	json.Unmarshal([]byte(msgStruct.GetMessage()), &newJob)
+
+	if _, ok := allJobs[newJob.Name]; ok {
+		LogErrorChan <- "New job already exist: " + newJob.Name
+		return
+	}
+
+	allJobs[newJob.Name] = &newJob
 }
 
 func proccesClusterKnock(msgStruct message.Message) {
@@ -464,6 +521,8 @@ func parseStartJob(name string) {
 		LogFileChan <- "There is no job: " + name + ". Creating new job"
 		job = AskForNewJob(name)
 		allJobs[name] = job
+		toSend := message.MakeShereJobMessage(*WorkerNode.GetNodeInfo(), *job)
+		broadcastMessage(&WorkerNode, toSend)
 	}
 	go startJob(job)
 }
