@@ -95,6 +95,8 @@ type NodeInfo struct {
 	Id        int    `json:"nodeId"`
 	IpAddress string `json:"ipAddress"`
 	Port      int    `json:"port"`
+	JobId     int    `json:"JobId"`
+	FractalId string `json:"FractalId"`
 }
 
 func (w *NodeInfo) GetFullAddress() string {

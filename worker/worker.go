@@ -60,6 +60,8 @@ var allJobs map[string]*job.Job
 var workingJob *job.Job
 var workingJobsInSystem int
 
+var clusterMap map[string]node.NodeInfo
+
 var WorkerNode node.Worker
 
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
@@ -587,4 +589,56 @@ func listenCommand(listenChan chan int32) {
 
 		}
 	}
+}
+
+func editDistance(str1, str2 string) int {
+	arr1 := []rune(str1)
+	arr2 := []rune(str2)
+	lenDiff := len(arr1) - len(arr2)
+	if lenDiff != 0 {
+		for i := 0; i < lenDiff; i++ {
+			arr1 = append(arr1, '0')
+		}
+		for i := 0; i < (-lenDiff); i++ {
+			arr2 = append(arr2, '0')
+		}
+	}
+
+	dist := 0
+	for i := 0; i < len(arr1); i++ {
+		if arr1[i] != arr2[i] {
+			dist++
+		}
+	}
+
+	return dist
+}
+
+func findNextNode(goal node.NodeInfo) node.NodeInfo {
+
+	var v, u, nextNode node.NodeInfo
+	if WorkerNode.Id > goal.Id {
+		v, u = *WorkerNode.GetNodeInfo(), goal
+	} else {
+		v, u = goal, *WorkerNode.GetNodeInfo()
+	}
+
+	dist1 := v.Id - u.Id
+	dist2 := len(WorkerNode.SystemInfo) - u.Id + v.Id
+	var minDist int
+	if dist1 > dist2 {
+		nextNode = WorkerNode.SystemInfo[WorkerNode.Prev]
+		minDist = dist2
+	} else {
+		nextNode = WorkerNode.SystemInfo[WorkerNode.Next]
+		minDist = dist1
+	}
+
+	editDist := editDistance(WorkerNode.FractalId, goal.FractalId)
+
+	if minDist > editDist {
+
+	}
+
+	return nextNode
 }
