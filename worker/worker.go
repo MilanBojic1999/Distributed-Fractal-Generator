@@ -203,6 +203,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesJobSharing(msgStruct)
 		}
 	} else {
+		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
+			LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
+			return
+		}
 		broadcastnext := false
 		switch msgStruct.MessageType {
 		case message.Entered:
@@ -222,13 +226,13 @@ func processRecivedMessage(msgStruct message.Message) {
 
 		}
 		if broadcastnext {
-			if partOfSlice(msgStruct.Route, WorkerNode.Id) {
-				LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
-			} else {
-				newMsg := msgStruct.MakeMeASender(&WorkerNode)
-				LogFileChan <- fmt.Sprintf("Recived but ain't for me: %s \\ Broadcasting", msgStruct.Log())
-				broadcastMessage(&WorkerNode, newMsg)
-			}
+			newMsg := msgStruct.MakeMeASender(&WorkerNode)
+			LogFileChan <- fmt.Sprintf("Recived but ain't for me: %s \\ Broadcasting", msgStruct.Log())
+			broadcastMessage(&WorkerNode, newMsg)
+		} else {
+			newMsg := msgStruct.MakeMeASender(&WorkerNode)
+			nextNode := findNextNode(newMsg.GetReciver())
+			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, newMsg)
 		}
 
 	}
@@ -616,6 +620,14 @@ func editDistance(str1, str2 string) int {
 
 func findNextNode(goal node.NodeInfo) node.NodeInfo {
 
+	if WorkerNode.Prev == goal.Port || WorkerNode.Next == goal.Port {
+		return goal
+	}
+
+	if _, ok := WorkerNode.Connections[goal.FractalId]; ok {
+		return goal
+	}
+
 	var v, u, nextNode node.NodeInfo
 	if WorkerNode.Id > goal.Id {
 		v, u = *WorkerNode.GetNodeInfo(), goal
@@ -637,7 +649,23 @@ func findNextNode(goal node.NodeInfo) node.NodeInfo {
 	editDist := editDistance(WorkerNode.FractalId, goal.FractalId)
 
 	if minDist > editDist {
+		myArr := []rune(WorkerNode.FractalId)
+		goalArr := []rune(goal.FractalId)
 
+		sze := len(myArr)
+		if sze > len(goalArr) {
+			sze = len(goalArr)
+		}
+
+		for i := 0; i < sze; i++ {
+			var tmpArr []rune
+			copy(tmpArr, myArr)
+			tmpArr[i] = goalArr[i]
+			if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
+				nextNode = v
+				break
+			}
+		}
 	}
 
 	return nextNode

@@ -121,6 +121,8 @@ func processRecivedMessage(msgStruct message.Message) {
 		go proccesJoinMessage(msgStruct)
 	case message.Leave:
 		go proccesLeaveMessage(msgStruct)
+	case message.Entered:
+		go proccesLeaveMessage(msgStruct)
 
 	}
 
