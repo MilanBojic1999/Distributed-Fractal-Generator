@@ -21,6 +21,10 @@ type Job struct {
 	Working    bool               `json:"-"`
 }
 
+func (job *Job) Log() string {
+	return fmt.Sprintf("Job %s: [%d %f] Resolution: %d x %d", job.Name, job.PointCount, job.Ration, job.Height, job.Width)
+}
+
 func (job *Job) MakeImage(path string) {
 
 	red := color.RGBA{255, 0, 0, 0xff}

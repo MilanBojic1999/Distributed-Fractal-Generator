@@ -378,11 +378,13 @@ func MakeClusterConnectionResponseMessage(sender, reciver node.NodeInfo, accepte
 	return &msgReturn
 }
 
-func MakeClusterJobSharingMessage(sender, reciver node.NodeInfo, jobInfo string) *Message {
+func MakeClusterJobSharingMessage(sender, reciver node.NodeInfo, jobInfo job.Job) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = jobInfo
+	jobstr, _ := json.Marshal(jobInfo)
+	msgReturn.Message = string(jobstr)
+
 	msgReturn.MessageType = JobSharing
 
 	msgReturn.OriginalSender = sender
@@ -440,7 +442,7 @@ func MakePurgeMessage(sender node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeShereJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
+func MakeShareJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
