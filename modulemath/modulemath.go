@@ -64,3 +64,26 @@ func (mm *ModMath) ModToInt(input string) int {
 func (mm *ModMath) CompareTwoNumbs(num1, num2 string) int {
 	return mm.ModToInt(num1) - mm.ModToInt(num2)
 }
+
+func EditDistance(str1, str2 string) int {
+	arr1 := []rune(str1)
+	arr2 := []rune(str2)
+	lenDiff := len(arr1) - len(arr2)
+	if lenDiff != 0 {
+		for i := 0; i < lenDiff; i++ {
+			arr1 = append(arr1, '0')
+		}
+		for i := 0; i < (-lenDiff); i++ {
+			arr2 = append(arr2, '0')
+		}
+	}
+
+	dist := 0
+	for i := 0; i < len(arr1); i++ {
+		if arr1[i] != arr2[i] {
+			dist++
+		}
+	}
+
+	return dist
+}

@@ -59,7 +59,6 @@ var ConnectionWaitGroup sync.WaitGroup
 var allJobs map[string]*job.Job
 
 var workingJob *job.Job
-var workingJobsInSystem int
 
 var clusterMap map[string]node.NodeInfo
 
@@ -83,7 +82,6 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 
 	allJobs = make(map[string]*job.Job)
 	workingJob = nil
-	workingJobsInSystem = 0
 
 	for _, v := range jobs {
 		fmt.Printf("Job: %v\n", v)
@@ -210,6 +208,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesClusterWelcome(msgStruct)
 		case message.EnteredCluster:
 			go proccesEnteredCluster(msgStruct)
+		case message.ClusterConnectionRequest:
+			go proccesClusterConnectionRequest(msgStruct)
+		case message.ClusterConnectionResponse:
+			go proccesClusterConnectionResponse(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -456,6 +458,26 @@ func proccesEnteredCluster(msgStruct message.Message) {
 	allJobs[node.JobName].Working = true
 }
 
+func proccesClusterConnectionRequest(msgStruct message.Message) {
+	if modulemath.EditDistance(msgStruct.GetSender().FractalId, WorkerNode.FractalId) != 1 {
+		LogErrorChan <- fmt.Sprintf("Wrong Cluster Connection! Wrong Edit Distance %s", msgStruct.GetSender().FractalId)
+		return
+	}
+
+	sender := msgStruct.GetSender()
+
+	WorkerNode.Connections[sender.FractalId] = sender
+	toSend := message.MakeClusterConnectionResponseMessage(sender, *WorkerNode.GetNodeInfo(), true)
+	sendMessage(WorkerNode.GetNodeInfo(), &sender, toSend)
+}
+
+func proccesClusterConnectionResponse(msgStruct message.Message) {
+
+	sender := msgStruct.GetSender()
+
+	WorkerNode.Connections[sender.FractalId] = sender
+}
+
 func makeInitConnections() {
 
 	ConnectionWaitGroup.Add(2)
@@ -633,7 +655,6 @@ func parseCommand(commandArg string) bool {
 		fmt.Printf("Unknown command: %s\n", command)
 	}
 	return true
-
 }
 
 func listenCommand(listenChan chan int32) {
@@ -657,29 +678,6 @@ func listenCommand(listenChan chan int32) {
 
 		}
 	}
-}
-
-func editDistance(str1, str2 string) int {
-	arr1 := []rune(str1)
-	arr2 := []rune(str2)
-	lenDiff := len(arr1) - len(arr2)
-	if lenDiff != 0 {
-		for i := 0; i < lenDiff; i++ {
-			arr1 = append(arr1, '0')
-		}
-		for i := 0; i < (-lenDiff); i++ {
-			arr2 = append(arr2, '0')
-		}
-	}
-
-	dist := 0
-	for i := 0; i < len(arr1); i++ {
-		if arr1[i] != arr2[i] {
-			dist++
-		}
-	}
-
-	return dist
 }
 
 func findNextNode(goal node.NodeInfo) node.NodeInfo {
@@ -710,7 +708,7 @@ func findNextNode(goal node.NodeInfo) node.NodeInfo {
 		minDist = dist1
 	}
 
-	editDist := editDistance(WorkerNode.FractalId, goal.FractalId)
+	editDist := modulemath.EditDistance(WorkerNode.FractalId, goal.FractalId)
 
 	if minDist > editDist {
 		myArr := []rune(WorkerNode.FractalId)
