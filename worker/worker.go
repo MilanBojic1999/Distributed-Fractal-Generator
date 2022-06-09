@@ -5,6 +5,7 @@ import (
 	chanfile "distributed/chainfile"
 	"distributed/job"
 	"distributed/message"
+	"distributed/modulemath"
 	"distributed/node"
 	"distributed/structures"
 	"encoding/json"
@@ -63,6 +64,8 @@ var workingJobsInSystem int
 var clusterMap map[string]node.NodeInfo
 
 var WorkerNode node.Worker
+
+var ModMath modulemath.ModMath
 
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
 
@@ -201,6 +204,12 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesConnectionResponse(msgStruct)
 		case message.JobSharing:
 			go proccesJobSharing(msgStruct)
+		case message.ClusterKnock:
+			go proccesClusterKnock(msgStruct)
+		case message.ClusterWelcome:
+			go proccesClusterWelcome(msgStruct)
+		case message.EnteredCluster:
+			go proccesEnteredCluster(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -390,6 +399,61 @@ func proccesJobSharing(msgStruct message.Message) {
 
 func proccesClusterKnock(msgStruct message.Message) {
 
+	lastFractalID := WorkerNode.FractalId
+	clusterInfo := make(map[int]node.NodeInfo)
+	for ind, val := range WorkerNode.SystemInfo {
+		if val.JobName == WorkerNode.JobName {
+			if ModMath.CompareTwoNumbs(lastFractalID, val.FractalId) < 0 {
+				lastFractalID = val.FractalId
+			}
+			clusterInfo[ind] = val
+		}
+	}
+
+	nextOne := ModMath.NextOne(lastFractalID)
+
+	toSend := message.MakeClusterWelcomeMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), nextOne, clusterInfo)
+	sendMessage(WorkerNode.GetNodeInfo(), &msgStruct.OriginalSender, toSend)
+}
+
+func proccesClusterWelcome(msgStruct message.Message) {
+
+	var input map[string]string
+	json.Unmarshal([]byte(msgStruct.Message), input)
+
+	fractalID := input["fractalID"]
+
+	var ClusterInfoMap map[int]node.NodeInfo
+	json.Unmarshal([]byte(input["ClusterInfo"]), ClusterInfoMap)
+
+	for _, val := range ClusterInfoMap {
+		WorkerNode.SystemInfo[val.Id] = val
+		clusterMap[val.FractalId] = val
+	}
+
+	WorkerNode.FractalId = fractalID
+
+	for _, val := range WorkerNode.SystemInfo {
+		toSend := message.MakeClusterEnteredMessage(*WorkerNode.GetNodeInfo(), val, *WorkerNode.GetNodeInfo())
+		nextOne := findNextNode(val)
+
+		sendMessage(WorkerNode.GetNodeInfo(), &nextOne, toSend)
+	}
+}
+
+func proccesEnteredCluster(msgStruct message.Message) {
+
+	var node node.NodeInfo
+	json.Unmarshal([]byte(msgStruct.Message), node)
+
+	if _, ok := clusterMap[node.FractalId]; ok {
+		LogErrorChan <- fmt.Sprintf("Node with the same fractalId %s in Cluster", node.FractalId)
+		return
+	}
+
+	WorkerNode.SystemInfo[node.Id] = node
+	clusterMap[node.FractalId] = node
+	allJobs[node.JobName].Working = true
 }
 
 func makeInitConnections() {

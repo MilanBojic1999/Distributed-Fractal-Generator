@@ -121,9 +121,6 @@ func processRecivedMessage(msgStruct message.Message) {
 		go proccesJoinMessage(msgStruct)
 	case message.Leave:
 		go proccesLeaveMessage(msgStruct)
-	case message.Entered:
-		go proccesLeaveMessage(msgStruct)
-
 	}
 
 }
@@ -140,11 +137,11 @@ func proccesHailMessage(msg message.Message) {
 	}
 	fmt.Println(toSend.Message)
 	sendMessage(BootstrapNode.GetNodeInfo(), &msg.OriginalSender, toSend)
-	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
 }
 
 func proccesJoinMessage(msg message.Message) {
 	BootstrapNode.Workers = append(BootstrapNode.Workers, msg.OriginalSender)
+	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
 }
 
 func proccesLeaveMessage(msg message.Message) {

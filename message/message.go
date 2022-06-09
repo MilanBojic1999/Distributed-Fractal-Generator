@@ -23,7 +23,7 @@ const (
 	ConnectionResponse        MessageType = 9
 	Quit                      MessageType = 10
 	ClusterKnock              MessageType = 11
-	EnterCluster              MessageType = 12
+	EnteredCluster            MessageType = 12
 	ClusterConnectionRequest  MessageType = 13
 	ClusterConnectionResponse MessageType = 14
 	JobSharing                MessageType = 15
@@ -34,6 +34,7 @@ const (
 	ShareJob                  MessageType = 20
 	StartJob                  MessageType = 21
 	ApproachCluster           MessageType = 22
+	ClusterWelcome            MessageType = 23
 )
 
 type MessageCounter struct {
@@ -330,12 +331,15 @@ func MakeClusterKnockMessage(sender, reciver node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeClusterEnterMessage(sender, reciver node.NodeInfo) *Message {
+func MakeClusterEnteredMessage(sender, reciver, node node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = "EnterCluster"
-	msgReturn.MessageType = EnterCluster
+
+	msgjson, _ := json.Marshal(node)
+
+	msgReturn.Message = string(msgjson)
+	msgReturn.MessageType = EnteredCluster
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
@@ -476,6 +480,27 @@ func MakeApproachClusterMessage(sender, reciver, contact node.NodeInfo) *Message
 	jsonstr, _ := json.Marshal(contact)
 	msgReturn.Message = string(jsonstr)
 	msgReturn.MessageType = ApproachCluster
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID string, ClusterInfo map[int]node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	jsonstr, _ := json.Marshal(ClusterInfo)
+
+	sentMap := map[string]string{"fractalID": fractalID, "ClusterInfo": string(jsonstr)}
+
+	jsonstr, _ = json.Marshal(sentMap)
+
+	msgReturn.Message = string(jsonstr)
+	msgReturn.MessageType = ClusterWelcome
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver

@@ -55,7 +55,7 @@ type Worker struct {
 	Port        int                 `json:"port"`
 	Prev        int                 `json:"-"`
 	Next        int                 `json:"-"`
-	JobId       int                 `json:"-"`
+	JobName     string              `json:"-"`
 	FractalId   string              `json:"-"`
 	Connections map[string]NodeInfo `json:"-"`
 	History     []structures.Point  `json:"-"`
@@ -95,7 +95,7 @@ type NodeInfo struct {
 	Id        int    `json:"nodeId"`
 	IpAddress string `json:"ipAddress"`
 	Port      int    `json:"port"`
-	JobId     int    `json:"JobId"`
+	JobName   string `json:"JobId"`
 	FractalId string `json:"FractalId"`
 }
 

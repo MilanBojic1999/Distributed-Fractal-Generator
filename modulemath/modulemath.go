@@ -60,3 +60,7 @@ func (mm *ModMath) ModToInt(input string) int {
 
 	return output
 }
+
+func (mm *ModMath) CompareTwoNumbs(num1, num2 string) int {
+	return mm.ModToInt(num1) - mm.ModToInt(num2)
+}
