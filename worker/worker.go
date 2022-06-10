@@ -69,6 +69,9 @@ var WorkerNode node.Worker
 
 var ModMath modulemath.ModMath
 
+var ImageInfoWaitingGroup sync.WaitGroup
+var ImageInfoChannel chan job.Job
+
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
 
 	LogFileChan = make(chan string, 15)
@@ -111,6 +114,8 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	if err != nil {
 		check(err, "LogFile")
 	}
+
+	ImageInfoChannel = make(chan job.Job, 100)
 
 	EnterenceChannel = make(chan int, 1)
 	WorkerEnteredChannel = make(chan int, 1)
@@ -217,6 +222,13 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesClusterConnectionRequest(msgStruct)
 		case message.ClusterConnectionResponse:
 			go proccesClusterConnectionResponse(msgStruct)
+		case message.ShareJob:
+			go proccesJobShare(msgStruct)
+		case message.ImageInfoRequest:
+			go proccesImageInfoRequest(msgStruct)
+		case message.ImageInfo:
+			go proccesImageInfoResponse(msgStruct)
+
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -426,12 +438,12 @@ func proccesClusterKnock(msgStruct message.Message) {
 func proccesClusterWelcome(msgStruct message.Message) {
 
 	var input map[string]string
-	json.Unmarshal([]byte(msgStruct.Message), input)
+	json.Unmarshal([]byte(msgStruct.Message), &input)
 
 	fractalID := input["fractalID"]
 
 	var ClusterInfoMap map[int]node.NodeInfo
-	json.Unmarshal([]byte(input["ClusterInfo"]), ClusterInfoMap)
+	json.Unmarshal([]byte(input["ClusterInfo"]), &ClusterInfoMap)
 
 	for _, val := range ClusterInfoMap {
 		WorkerNode.SystemInfo[val.Id] = val
@@ -446,6 +458,22 @@ func proccesClusterWelcome(msgStruct message.Message) {
 
 		sendMessage(WorkerNode.GetNodeInfo(), &nextOne, toSend)
 	}
+}
+
+func ReorganizeSystem() {
+	for _, val := range WorkerNode.SystemInfo {
+		if val.Id == WorkerNode.Id {
+			continue
+		}
+
+		toSend := message.MakeStopShareJobMessage(*WorkerNode.GetNodeInfo(), val)
+		nextNode := findNextNode(val)
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+
+		ImageInfoWaitingGroup.Add(1)
+	}
+
+	ImageInfoWaitingGroup.Wait()
 }
 
 func scaleJob(jobInput *job.Job, scalePoint structures.Point, scale float64) *job.Job {
@@ -490,7 +518,7 @@ func splitWorkingJob() {
 func proccesEnteredCluster(msgStruct message.Message) {
 
 	var node node.NodeInfo
-	json.Unmarshal([]byte(msgStruct.Message), node)
+	json.Unmarshal([]byte(msgStruct.Message), &node)
 
 	if _, ok := clusterMap[node.FractalId]; ok {
 		LogErrorChan <- fmt.Sprintf("Node with the same fractalId %s in Cluster", node.FractalId)
@@ -535,6 +563,23 @@ func proccesClusterConnectionResponse(msgStruct message.Message) {
 	WorkerNode.Connections[sender.FractalId] = sender
 }
 
+func proccesStartJob(msgStruct message.Message) {
+
+	var tmpJob job.Job
+	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+
+	if _, ok := allJobs[tmpJob.Name]; !ok {
+		LogErrorChan <- fmt.Sprintf("Job %s doenst exist...", tmpJob.Log())
+		allJobs[tmpJob.Name] = &tmpJob
+	}
+
+	workingJob = &tmpJob
+
+	LogFileChan <- "Starting job: " + workingJob.Log()
+
+	go startJob(workingJob)
+}
+
 func proccesJobShare(msgStruct message.Message) {
 
 	jobInput := new(job.Job)
@@ -554,6 +599,19 @@ func proccesJobShare(msgStruct message.Message) {
 }
 
 func proccesImageInfoRequest(msgStruct message.Message) {
+
+	if workingJob == nil {
+		LogErrorChan <- "Asked for image info but dont having job"
+	}
+
+	toSend := message.MakeImageInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, *workingJob)
+
+	nextNode := findNextNode(msgStruct.GetSender())
+
+	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+}
+
+func proccesImageInfoResponse(msgStruct message.Message) {
 
 }
 

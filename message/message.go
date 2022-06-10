@@ -35,6 +35,8 @@ const (
 	StartJob                  MessageType = 21
 	ApproachCluster           MessageType = 22
 	ClusterWelcome            MessageType = 23
+	StopShareJob              MessageType = 24
+	StoppedJobInfo            MessageType = 25
 )
 
 type MessageCounter struct {
@@ -410,11 +412,11 @@ func MakeImageInfoRequestMessage(sender, reciver node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeImageInfoMessage(sender, reciver node.NodeInfo, points [][]int) *Message {
+func MakeImageInfoMessage(sender, reciver node.NodeInfo, jobInput job.Job) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	points_json, _ := json.Marshal(points)
+	points_json, _ := json.Marshal(jobInput)
 	msgReturn.Message = string(points_json)
 	msgReturn.MessageType = ImageInfo
 
@@ -503,6 +505,41 @@ func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID string, 
 
 	msgReturn.Message = string(jsonstr)
 	msgReturn.MessageType = ClusterWelcome
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeStopShareJobMessage(sender, reciver node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	msgReturn.Message = "StopShareJob"
+	msgReturn.MessageType = StopShareJob
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobInput job.Job) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	jsonstr, _ := json.Marshal(jobInput)
+
+	msgReturn.Message = string(jsonstr)
+
+	msgReturn.MessageType = StoppedJobInfo
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver

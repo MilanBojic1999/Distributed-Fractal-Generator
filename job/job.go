@@ -17,7 +17,7 @@ type Job struct {
 	Width      int                `json:"width"`
 	Height     int                `json:"height"`
 	MainPoints []structures.Point `json:"mainPoints"`
-	Points     []structures.Point `json:"-"`
+	Points     []structures.Point `json:"allPoints"`
 	Working    bool               `json:"-"`
 }
 
