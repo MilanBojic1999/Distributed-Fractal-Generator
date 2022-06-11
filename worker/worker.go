@@ -228,7 +228,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesImageInfoRequest(msgStruct)
 		case message.ImageInfo:
 			go proccesImageInfoResponse(msgStruct)
-
+		case message.StartJob:
+			go proccesStartJob(msgStruct)
+		case message.ApproachCluster:
+			go proccesApproachCluster(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -474,6 +477,52 @@ func ReorganizeSystem() {
 	}
 
 	ImageInfoWaitingGroup.Wait()
+
+	WorkingJobsMap := make(map[string]*job.Job)
+
+	for j := 0; j < len(WorkerNode.SystemInfo); j++ {
+		tmpJob := <-ImageInfoChannel
+		if val, ok := WorkingJobsMap[tmpJob.Name]; !ok {
+			jobic := *allJobs[tmpJob.Name]
+			jobic.Working = true
+			// jobic.Points = make([]structures.Point, 0)
+			WorkingJobsMap[tmpJob.Name] = &jobic
+		} else {
+			val.Points = append(val.Points, tmpJob.Points...)
+			WorkingJobsMap[val.Name] = val
+		}
+	}
+
+	var workingJobs []job.Job
+	for _, job := range WorkingJobsMap {
+		workingJobs = append(workingJobs, *job)
+	}
+
+	noWorkingJobs := len(workingJobs)
+
+	i := 0
+	for ; i < noWorkingJobs; i++ {
+		reciver := WorkerNode.SystemInfo[i]
+		jobic := workingJobs[i]
+		msg := message.MakeStartJobMessage(*WorkerNode.GetNodeInfo(), reciver, jobic.Name)
+		nextNode := findNextNode(reciver)
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+	}
+
+	jobInd := 0
+
+	for ; i < len(WorkerNode.SystemInfo); i++ {
+		reciver := WorkerNode.SystemInfo[i]
+		contact := WorkerNode.SystemInfo[jobInd]
+
+		msg := message.MakeApproachClusterMessage(*WorkerNode.GetNodeInfo(), reciver, contact)
+		nextNode := findNextNode(reciver)
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+
+		jobInd = (jobInd + 1) % noWorkingJobs
+
+	}
+
 }
 
 func scaleJob(jobInput *job.Job, scalePoint structures.Point, scale float64) *job.Job {
@@ -580,6 +629,18 @@ func proccesStartJob(msgStruct message.Message) {
 	go startJob(workingJob)
 }
 
+func proccesApproachCluster(msgStruct message.Message) {
+
+	var contact node.NodeInfo
+	json.Unmarshal([]byte(msgStruct.Message), &contact)
+
+	toSend := message.MakeClusterKnockMessage(*WorkerNode.GetNodeInfo(), contact)
+	nextNode := findNextNode(contact)
+
+	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+
+}
+
 func proccesJobShare(msgStruct message.Message) {
 
 	jobInput := new(job.Job)
@@ -609,9 +670,16 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 	nextNode := findNextNode(msgStruct.GetSender())
 
 	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+
 }
 
 func proccesImageInfoResponse(msgStruct message.Message) {
+
+	var tmpJob job.Job
+	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+
+	ImageInfoChannel <- tmpJob
+	ImageInfoWaitingGroup.Done()
 
 }
 
