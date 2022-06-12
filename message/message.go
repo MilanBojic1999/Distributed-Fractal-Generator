@@ -42,7 +42,7 @@ const (
 	ImageInfo                 MessageType = 17
 	SystemKnock               MessageType = 18
 	Purge                     MessageType = 19
-	ShareJob                  MessageType = 20
+	SharaNewJob               MessageType = 20
 	StartJob                  MessageType = 21
 	ApproachCluster           MessageType = 22
 	ClusterWelcome            MessageType = 23
@@ -347,7 +347,7 @@ func MakeClusterKnockMessage(sender, reciver node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeClusterEnteredMessage(sender, reciver, node node.NodeInfo) *Message {
+func MakeEnteredClusterMessage(sender, reciver, node node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -458,13 +458,13 @@ func MakePurgeMessage(sender node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeShareJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
+func MakeSharaNewJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	jsonstr, _ := json.Marshal(jobInput)
 	msgReturn.Message = string(jsonstr)
-	msgReturn.MessageType = ShareJob
+	msgReturn.MessageType = SharaNewJob
 
 	msgReturn.OriginalSender = sender
 	tmpReciver := new(node.NodeInfo)
@@ -507,13 +507,13 @@ func MakeApproachClusterMessage(sender, reciver, contact node.NodeInfo) *Message
 	return &msgReturn
 }
 
-func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID string, ClusterInfo map[int]node.NodeInfo) *Message {
+func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID, jobName string, ClusterInfo map[int]node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	jsonstr, _ := json.Marshal(ClusterInfo)
 
-	sentMap := map[string]string{"fractalID": fractalID, "ClusterInfo": string(jsonstr)}
+	sentMap := map[string]string{"fractalID": fractalID, "jobName": jobName, "ClusterInfo": string(jsonstr)}
 
 	jsonstr, _ = json.Marshal(sentMap)
 

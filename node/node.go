@@ -87,6 +87,8 @@ func (w *Worker) GetNodeInfo() *NodeInfo {
 	toReturn.Id = w.GetId()
 	toReturn.IpAddress = w.GetAdders()
 	toReturn.Port = w.GetPort()
+	toReturn.JobName = w.JobName
+	toReturn.FractalId = w.FractalId
 
 	return toReturn
 }
