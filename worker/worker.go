@@ -245,6 +245,8 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesStopShareJob(msgStruct)
 		case message.StoppedJobInfo:
 			go proccesStoppedJobInfo(msgStruct)
+		case message.UpdatedNode:
+			go proccessUpdatedNode(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -268,6 +270,9 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesEnteredMessage(msgStruct)
 			broadcastnext = true
 
+		case message.UpdatedNode:
+			go proccessUpdatedNode(msgStruct)
+			broadcastnext = true
 		}
 		if broadcastnext {
 			newMsg := msgStruct.MakeMeASender(&WorkerNode)
@@ -340,6 +345,32 @@ func proccesWelcomeMessage(msgStruct message.Message) {
 	toSendBootstrap := message.MakeJoinMessage(*WorkerNode.GetNodeInfo(), *BootstrapNode.GetNodeInfo())
 	go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSendBootstrap)
 	WorkerEnteredChannel <- 1
+}
+
+func updateNode() {
+	toBroadCast := message.MakeUpdatedNodeMessage(*WorkerNode.GetNodeInfo(), *WorkerNode.GetNodeInfo())
+	broadcastMessage(&WorkerNode, toBroadCast)
+}
+
+func proccessUpdatedNode(msgStruct message.Message) {
+
+	var tmpNode node.NodeInfo
+	json.Unmarshal([]byte(msgStruct.Message), &tmpNode)
+
+	if _, ok := WorkerNode.SystemInfo[tmpNode.Id]; !ok {
+		LogErrorChan <- "Updating non existing node" + tmpNode.String()
+	}
+
+	WorkerNode.SystemInfo[tmpNode.Id] = tmpNode
+	if strings.EqualFold(WorkerNode.JobName, tmpNode.JobName) {
+		for key, val := range clusterMap {
+			if val.Id == tmpNode.Id {
+				delete(clusterMap, key)
+				clusterMap[tmpNode.FractalId] = tmpNode
+				break
+			}
+		}
+	}
 }
 
 func proccesSystemKnockMessage(msgStruct message.Message) {
@@ -455,6 +486,7 @@ func proccesJobStatusRequest(msgStruct message.Message) {
 		LogErrorChan <- "Asked for Job status but there is no job"
 	} else {
 		jobStatus = *workingJob.GetJobStatus(WorkerNode.FractalId)
+		LogFileChan <- "Asked for Job status: " + jobStatus.Name
 	}
 
 	toSend := message.MakeJobStatusMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), jobStatus)
@@ -530,6 +562,15 @@ func proccesStopShareJob(msgStruct message.Message) {
 		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), *workingJob)
 		nextNode := findNextNode(msgStruct.OriginalSender)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+
+		currJob := allJobs[workingJob.Name]
+		currJob.Points = make([]structures.Point, 0)
+		allJobs[currJob.Name] = currJob
+
+		WorkerNode.JobName = ""
+		WorkerNode.FractalId = ""
+
+		updateNode()
 
 		workingJob = nil
 	}
@@ -653,6 +694,8 @@ func splitWorkingJob() {
 
 	workingJob = scaleJob(workingJob, workingJob.MainPoints[0], scale)
 	waitingChildrenArray = make([]node.NodeInfo, 0)
+	LogFileChan <- "Staring partial job: " + workingJob.Log()
+
 	go startJob(workingJob)
 }
 
@@ -728,6 +771,10 @@ func proccesStartJob(msgStruct message.Message) {
 
 	WorkerNode.JobName = workingJob.Name
 	WorkerNode.FractalId = "0"
+
+	WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
+
+	updateNode()
 
 	LogFileChan <- "Starting job: " + workingJob.Log()
 
@@ -980,28 +1027,13 @@ func allJobsStatus() int {
 		msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
 		nextNode := findNextNode(node)
 
+		JobStatusWaitingGroup.Add(1)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 	}
 
 	nodeWaiting := len(WorkerNode.SystemInfo)
 
-	JobStatusWaitingGroup.Add(nodeWaiting)
 	JobStatusWaitingGroup.Wait()
-
-	jobStatusMap := make(map[string]job.JobStatus)
-
-	for i := 0; i < nodeWaiting; i++ {
-		tmpJobStatus := <-JobStatusChannel
-		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
-			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
-		} else {
-			val.WorkingNodes++
-			val.PointsGenerated += tmpJobStatus.PointsGenerated
-			for key := range tmpJobStatus.PointsPerNodes {
-				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
-			}
-		}
-	}
 
 	return nodeWaiting
 }
@@ -1014,29 +1046,14 @@ func oneJobStatus(name string) int {
 		if strings.EqualFold(name, node.JobName) {
 			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
 			nextNode := findNextNode(node)
-
+			JobStatusWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 			nodeWaiting++
+
 		}
 	}
-
-	JobStatusWaitingGroup.Add(nodeWaiting)
+	LogFileChan <- fmt.Sprintf("Waiting: %d", nodeWaiting)
 	JobStatusWaitingGroup.Wait()
-
-	jobStatusMap := make(map[string]job.JobStatus)
-
-	for i := 0; i < nodeWaiting; i++ {
-		tmpJobStatus := <-JobStatusChannel
-		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
-			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
-		} else {
-			val.WorkingNodes++
-			val.PointsGenerated += tmpJobStatus.PointsGenerated
-			for key := range tmpJobStatus.PointsPerNodes {
-				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
-			}
-		}
-	}
 
 	return nodeWaiting
 }
@@ -1047,30 +1064,33 @@ func oneNodeJobStatus(name, fractalID string) int {
 			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
 			nextNode := findNextNode(node)
 
+			JobStatusWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 			break
 		}
 	}
 
-	JobStatusWaitingGroup.Add(1)
 	JobStatusWaitingGroup.Wait()
 
 	return 1
 }
 
 func parseStatusJob(args string) {
-	LogFileChan <- "Status getting: " + args
+	LogFileChan <- "Status getting: " + args + " ))))"
 
-	args_array := strings.SplitN(args, " ", 2)
+	args_array := strings.Split(args, " ")
 
 	nodeWaiting := 0
 
 	switch len(args_array) {
 	case 0:
+		LogFileChan <- "All jobs status"
 		nodeWaiting = allJobsStatus()
 	case 1:
+		LogFileChan <- "One job status"
 		nodeWaiting = oneJobStatus(args_array[0])
 	case 2:
+		LogFileChan <- "One job on one node status"
 		nodeWaiting = oneNodeJobStatus(args_array[0], args_array[1])
 	default:
 		LogErrorChan <- "wrong number of arguments: " + args
@@ -1088,6 +1108,7 @@ func parseStatusJob(args string) {
 			for key := range tmpJobStatus.PointsPerNodes {
 				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
 			}
+			jobStatusMap[val.Name] = val
 		}
 	}
 
@@ -1118,7 +1139,13 @@ func parseCommand(commandArg string) bool {
 	} else if strings.EqualFold(command, "stop") {
 		parseStopJob(command_arr[1])
 	} else if strings.EqualFold(command, "status") {
-		parseStatusJob(command_arr[1])
+		var args string
+		if len(command_arr) == 1 {
+			args = ""
+		} else {
+			args = command_arr[1]
+		}
+		parseStatusJob(args)
 	} else if strings.EqualFold(command, "list") {
 		parseListNodes()
 	} else {
@@ -1152,7 +1179,7 @@ func listenCommand(listenChan chan int32) {
 
 func findNextNode(goal node.NodeInfo) node.NodeInfo {
 
-	if WorkerNode.Prev == goal.Id || WorkerNode.Next == goal.Id {
+	if WorkerNode.Id == goal.Id || WorkerNode.Prev == goal.Id || WorkerNode.Next == goal.Id {
 		return goal
 	}
 

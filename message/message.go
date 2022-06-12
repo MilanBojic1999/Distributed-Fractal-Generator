@@ -51,6 +51,7 @@ const (
 	AskForJob                 MessageType = 26
 	JobStatusRequest          MessageType = 27
 	JobStatus                 MessageType = 28
+	UpdatedNode               MessageType = 29
 )
 
 type MessageCounter struct {
@@ -610,6 +611,27 @@ func MakeJobStatusMessage(sender, reciver node.NodeInfo, jobStatus job.JobStatus
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeUpdatedNodeMessage(sender, nodeInput node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	jsonstr, _ := json.Marshal(nodeInput)
+
+	msgReturn.Message = string(jsonstr)
+
+	msgReturn.MessageType = JobStatus
+
+	msgReturn.OriginalSender = sender
+	tmpReciver := new(node.NodeInfo)
+	tmpReciver.Id = -1
+	msgReturn.Reciver = *tmpReciver
 
 	msgReturn.Route = []int{sender.Id}
 
