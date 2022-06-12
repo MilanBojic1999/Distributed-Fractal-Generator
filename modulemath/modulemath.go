@@ -1,6 +1,7 @@
 package modulemath
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -69,6 +70,7 @@ func EditDistance(str1, str2 string) int {
 	arr1 := []rune(str1)
 	arr2 := []rune(str2)
 	lenDiff := len(arr1) - len(arr2)
+	fmt.Printf("%v vs. %v := %d", str1, str2, lenDiff)
 	if lenDiff != 0 {
 		for i := 0; i < lenDiff; i++ {
 			arr1 = append(arr1, '0')

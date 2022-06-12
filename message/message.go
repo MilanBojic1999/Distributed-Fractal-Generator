@@ -8,6 +8,17 @@ import (
 	"sync/atomic"
 )
 
+func firstN(s string, n int) string {
+	i := 0
+	for j := range s {
+		if i == n {
+			return s[:j]
+		}
+		i++
+	}
+	return s
+}
+
 type MessageType int32
 
 const (
@@ -104,7 +115,7 @@ func (msg *Message) GetMessage() string {
 }
 
 func (msg *Message) Log() string {
-	return fmt.Sprintf("%d¦%d¦%d¦%d¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, msg.Message)
+	return fmt.Sprintf("%d¦%d¦%d¦%d¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 200))
 }
 
 func (msg *Message) MakeMeASender(node node.INode) IMessage {

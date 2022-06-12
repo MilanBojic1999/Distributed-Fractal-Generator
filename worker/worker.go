@@ -93,6 +93,7 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	workingJob = nil
 	childrenWaiting = 0
 	waitingChildrenArray = make([]node.NodeInfo, 0)
+	clusterMap = make(map[string]node.NodeInfo)
 
 	for _, v := range jobs {
 		fmt.Printf("Job: %v\n", v)
@@ -240,6 +241,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesJobStatus(msgStruct)
 		case message.JobStatusRequest:
 			go proccesJobStatusRequest(msgStruct)
+		case message.StopShareJob:
+			go proccesStopShareJob(msgStruct)
+		case message.StoppedJobInfo:
+			go proccesStoppedJobInfo(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -496,6 +501,38 @@ func proccesClusterWelcome(msgStruct message.Message) {
 	}
 }
 
+func proccesStopShareJob(msgStruct message.Message) {
+	if workingJob == nil {
+		LogErrorChan <- "No job running to stop"
+
+		var dummyJob job.Job
+		dummyJob.Name = "NumbijanacNarnijacan"
+
+		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), dummyJob)
+		nextNode := findNextNode(msgStruct.OriginalSender)
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+	} else {
+		JobProccesingPoisonChan <- 1
+		LogFileChan <- "Stopping and Sharing job: " + workingJob.Name
+
+		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), *workingJob)
+		nextNode := findNextNode(msgStruct.OriginalSender)
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+
+		workingJob = nil
+	}
+}
+
+func proccesStoppedJobInfo(msgStruct message.Message) {
+
+	var tmpJob job.Job
+	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+
+	ImageInfoChannel <- tmpJob
+
+	ImageInfoWaitingGroup.Done()
+}
+
 func ReorganizeSystem() {
 	for _, val := range WorkerNode.SystemInfo {
 		// if val.Id == WorkerNode.Id {
@@ -526,7 +563,7 @@ func ReorganizeSystem() {
 			// jobic.Working = true
 			// // jobic.Points = make([]structures.Point, 0)
 			// WorkingJobsMap[tmpJob.Name] = &jobic
-			LogErrorChan <- "Unknown working job: " + val.Log()
+			LogErrorChan <- "Unknown working job: " + tmpJob.Log()
 		} else {
 			val.Points = append(val.Points, tmpJob.Points...)
 			WorkingJobsMap[val.Name] = val
@@ -539,14 +576,20 @@ func ReorganizeSystem() {
 	}
 
 	noWorkingJobs := len(workingJobs)
+	if noWorkingJobs == 0 {
+		LogFileChan <- "No job to work"
+		return
+	}
 
 	i := 0
 	for ; i < noWorkingJobs; i++ {
 		reciver := WorkerNode.SystemInfo[i]
 		jobic := workingJobs[i]
+		LogFileChan <- "Sending job to start: " + jobic.Log()
 		msg := message.MakeStartJobMessage(*WorkerNode.GetNodeInfo(), reciver, jobic.Name)
 		nextNode := findNextNode(reciver)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+		time.Sleep(time.Millisecond * 200)
 	}
 
 	jobInd := 0
@@ -624,7 +667,10 @@ func proccesEnteredCluster(msgStruct message.Message) {
 
 	WorkerNode.SystemInfo[node.Id] = node
 	clusterMap[node.FractalId] = node
-	allJobs[node.JobName].Working = true
+
+	tmpJob := allJobs[node.JobName]
+	tmpJob.Working = true
+	allJobs[tmpJob.Name] = tmpJob
 }
 
 func proccesClusterConnectionRequest(msgStruct message.Message) {
@@ -654,15 +700,17 @@ func proccesClusterConnectionResponse(msgStruct message.Message) {
 
 func proccesStartJob(msgStruct message.Message) {
 
-	var tmpJob job.Job
-	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+	jobName := msgStruct.Message
 
-	if _, ok := allJobs[tmpJob.Name]; !ok {
-		LogErrorChan <- fmt.Sprintf("Job %s doenst exist...", tmpJob.Log())
-		allJobs[tmpJob.Name] = &tmpJob
+	if _, ok := allJobs[jobName]; !ok {
+		LogErrorChan <- fmt.Sprintf("Job %s doenst exist...", jobName)
+		return
 	}
 
-	workingJob = &tmpJob
+	workingJob = allJobs[jobName]
+
+	WorkerNode.JobName = workingJob.Name
+	WorkerNode.FractalId = "0"
 
 	LogFileChan <- "Starting job: " + workingJob.Log()
 
@@ -888,6 +936,7 @@ func parseStopJob(name string) {
 	}
 
 	job.Working = false
+	job.Points = make([]structures.Point, 0, 100)
 	allJobs[job.Name] = job
 	ReorganizeSystem()
 
@@ -905,7 +954,7 @@ func parseResultJob(args string) {
 	}
 
 	job, ok := allJobs[name]
-	if !ok {
+	if !ok || !job.Working {
 		LogErrorChan <- "There is no job: " + name
 		return
 	}
