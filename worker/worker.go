@@ -651,7 +651,7 @@ func ReorganizeSystem() {
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 
 		jobInd = (jobInd + 1) % noWorkingJobs
-		time.Sleep(time.Millisecond * 1000)
+		time.Sleep(time.Millisecond * 1500)
 
 	}
 
@@ -1082,24 +1082,29 @@ func parseStatusJob(args string) {
 
 	nodeWaiting := 0
 
-	switch len(args_array) {
-	case 0:
+	if len(args) == 0 {
 		LogFileChan <- "All jobs status"
 		nodeWaiting = allJobsStatus()
-	case 1:
-		LogFileChan <- "One job status"
-		nodeWaiting = oneJobStatus(args_array[0])
-	case 2:
-		LogFileChan <- "One job on one node status"
-		nodeWaiting = oneNodeJobStatus(args_array[0], args_array[1])
-	default:
-		LogErrorChan <- "wrong number of arguments: " + args
-	}
+	} else {
 
+		switch len(args_array) {
+		case 1:
+			LogFileChan <- "One job status"
+			nodeWaiting = oneJobStatus(args_array[0])
+		case 2:
+			LogFileChan <- "One job on one node status"
+			nodeWaiting = oneNodeJobStatus(args_array[0], args_array[1])
+		default:
+			LogErrorChan <- "wrong number of arguments: " + args
+		}
+	}
 	jobStatusMap := make(map[string]job.JobStatus)
 
 	for i := 0; i < nodeWaiting; i++ {
 		tmpJobStatus := <-JobStatusChannel
+		if len(tmpJobStatus.Name) == 0 {
+			continue
+		}
 		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
 			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
 		} else {

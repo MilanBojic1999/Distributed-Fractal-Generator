@@ -19,39 +19,39 @@ func firstN(s string, n int) string {
 	return s
 }
 
-type MessageType int32
+type MessageType string
 
 const (
-	Info                      MessageType = 0
-	InfoBroadcast             MessageType = 1
-	Hail                      MessageType = 2
-	Contact                   MessageType = 3
-	Welcome                   MessageType = 4
-	Join                      MessageType = 5
-	Leave                     MessageType = 6
-	Entered                   MessageType = 7
-	ConnectionRequest         MessageType = 8
-	ConnectionResponse        MessageType = 9
-	Quit                      MessageType = 10
-	ClusterKnock              MessageType = 11
-	EnteredCluster            MessageType = 12
-	ClusterConnectionRequest  MessageType = 13
-	ClusterConnectionResponse MessageType = 14
-	JobSharing                MessageType = 15
-	ImageInfoRequest          MessageType = 16
-	ImageInfo                 MessageType = 17
-	SystemKnock               MessageType = 18
-	Purge                     MessageType = 19
-	SharaNewJob               MessageType = 20
-	StartJob                  MessageType = 21
-	ApproachCluster           MessageType = 22
-	ClusterWelcome            MessageType = 23
-	StopShareJob              MessageType = 24
-	StoppedJobInfo            MessageType = 25
-	AskForJob                 MessageType = 26
-	JobStatusRequest          MessageType = 27
-	JobStatus                 MessageType = 28
-	UpdatedNode               MessageType = 29
+	Info                      MessageType = "Info"
+	InfoBroadcast             MessageType = "InfoBroadcast"
+	Hail                      MessageType = "Hail"
+	Contact                   MessageType = "Contact"
+	Welcome                   MessageType = "Welcome"
+	Join                      MessageType = "Join"
+	Leave                     MessageType = "Leave"
+	Entered                   MessageType = "Entered"
+	ConnectionRequest         MessageType = "ConnectionRequest"
+	ConnectionResponse        MessageType = "ConnectionResponse"
+	Quit                      MessageType = "Quit"
+	ClusterKnock              MessageType = "ClusterKnock"
+	EnteredCluster            MessageType = "EnteredCluster"
+	ClusterConnectionRequest  MessageType = "ClusterConnectionRequest"
+	ClusterConnectionResponse MessageType = "ClusterConnectionResponse"
+	JobSharing                MessageType = "JobSharing"
+	ImageInfoRequest          MessageType = "ImageInfoRequest"
+	ImageInfo                 MessageType = "ImageInfo"
+	SystemKnock               MessageType = "SystemKnock"
+	Purge                     MessageType = "Purge"
+	SharaNewJob               MessageType = "SharaNewJob"
+	StartJob                  MessageType = "StartJob"
+	ApproachCluster           MessageType = "ApproachCluster"
+	ClusterWelcome            MessageType = "ClusterWelcome"
+	StopShareJob              MessageType = "StopShareJob"
+	StoppedJobInfo            MessageType = "StoppedJobInfo"
+	AskForJob                 MessageType = "AskForJob"
+	JobStatusRequest          MessageType = "JobStatusRequest"
+	JobStatus                 MessageType = "JobStatus"
+	UpdatedNode               MessageType = "UpdatedNode"
 )
 
 type MessageCounter struct {
@@ -116,7 +116,7 @@ func (msg *Message) GetMessage() string {
 }
 
 func (msg *Message) Log() string {
-	return fmt.Sprintf("%d¦%d¦%d¦%d¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 200))
+	return fmt.Sprintf("%d¦%d¦%d¦%s¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 200))
 }
 
 func (msg *Message) MakeMeASender(node node.INode) IMessage {
@@ -626,7 +626,7 @@ func MakeUpdatedNodeMessage(sender, nodeInput node.NodeInfo) *Message {
 
 	msgReturn.Message = string(jsonstr)
 
-	msgReturn.MessageType = JobStatus
+	msgReturn.MessageType = UpdatedNode
 
 	msgReturn.OriginalSender = sender
 	tmpReciver := new(node.NodeInfo)
