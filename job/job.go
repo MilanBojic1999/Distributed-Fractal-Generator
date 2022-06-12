@@ -49,3 +49,21 @@ func (job *Job) MakeImage(path string) {
 
 	png.Encode(f, img)
 }
+
+type JobStatus struct {
+	Name            string         `json:"name"`
+	PointsGenerated int            `json:"pointsGenerated"`
+	WorkingNodes    int            `json:"workingNodes"`
+	PointsPerNodes  map[string]int `json:"pointNodes"`
+}
+
+func (j *Job) GetJobStatus(fractalID string) *JobStatus {
+	jobStatus := new(JobStatus)
+	jobStatus.Name = j.Name
+	jobStatus.PointsGenerated = len(j.Points)
+	jobStatus.WorkingNodes = 1
+	jobStatus.PointsPerNodes = make(map[string]int)
+	jobStatus.PointsPerNodes[fractalID] = jobStatus.PointsGenerated
+
+	return jobStatus
+}

@@ -72,6 +72,9 @@ var ModMath modulemath.ModMath
 var ImageInfoWaitingGroup sync.WaitGroup
 var ImageInfoChannel chan job.Job
 
+var JobStatusWaitingGroup sync.WaitGroup
+var JobStatusChannel chan job.JobStatus
+
 func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
 
 	LogFileChan = make(chan string, 15)
@@ -116,6 +119,7 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	}
 
 	ImageInfoChannel = make(chan job.Job, 100)
+	JobStatusChannel = make(chan job.JobStatus, 100)
 
 	EnterenceChannel = make(chan int, 1)
 	WorkerEnteredChannel = make(chan int, 1)
@@ -232,6 +236,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesStartJob(msgStruct)
 		case message.ApproachCluster:
 			go proccesApproachCluster(msgStruct)
+		case message.JobStatus:
+			go proccesJobStatus(msgStruct)
+		case message.JobStatusRequest:
+			go proccesJobStatusRequest(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
@@ -419,6 +427,31 @@ func proccesJobSharing(msgStruct message.Message) {
 	allJobs[newJob.Name] = &newJob
 }
 
+func proccesJobStatus(msgStruct message.Message) {
+
+	var newJobStatus job.JobStatus
+	json.Unmarshal([]byte(msgStruct.GetMessage()), &newJobStatus)
+
+	JobStatusChannel <- newJobStatus
+	JobStatusWaitingGroup.Done()
+}
+
+func proccesJobStatusRequest(msgStruct message.Message) {
+
+	var jobStatus job.JobStatus
+
+	if workingJob == nil {
+		LogErrorChan <- "Asked for Job status but there is no job"
+	} else {
+		jobStatus = *workingJob.GetJobStatus(WorkerNode.FractalId)
+	}
+
+	toSend := message.MakeJobStatusMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), jobStatus)
+	nextNode := findNextNode(msgStruct.GetSender())
+
+	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
+}
+
 func proccesClusterKnock(msgStruct message.Message) {
 
 	lastFractalID := WorkerNode.FractalId
@@ -465,9 +498,9 @@ func proccesClusterWelcome(msgStruct message.Message) {
 
 func ReorganizeSystem() {
 	for _, val := range WorkerNode.SystemInfo {
-		if val.Id == WorkerNode.Id {
-			continue
-		}
+		// if val.Id == WorkerNode.Id {
+		// 	continue
+		// }
 
 		toSend := message.MakeStopShareJobMessage(*WorkerNode.GetNodeInfo(), val)
 		nextNode := findNextNode(val)
@@ -476,17 +509,24 @@ func ReorganizeSystem() {
 		ImageInfoWaitingGroup.Add(1)
 	}
 
-	ImageInfoWaitingGroup.Wait()
-
 	WorkingJobsMap := make(map[string]*job.Job)
+
+	for _, jj := range allJobs {
+		if jj.Working {
+			WorkingJobsMap[jj.Name] = jj
+		}
+	}
+
+	ImageInfoWaitingGroup.Wait()
 
 	for j := 0; j < len(WorkerNode.SystemInfo); j++ {
 		tmpJob := <-ImageInfoChannel
 		if val, ok := WorkingJobsMap[tmpJob.Name]; !ok {
-			jobic := *allJobs[tmpJob.Name]
-			jobic.Working = true
-			// jobic.Points = make([]structures.Point, 0)
-			WorkingJobsMap[tmpJob.Name] = &jobic
+			// jobic := *allJobs[tmpJob.Name]
+			// jobic.Working = true
+			// // jobic.Points = make([]structures.Point, 0)
+			// WorkingJobsMap[tmpJob.Name] = &jobic
+			LogErrorChan <- "Unknown working job: " + val.Log()
 		} else {
 			val.Points = append(val.Points, tmpJob.Points...)
 			WorkingJobsMap[val.Name] = val
@@ -822,20 +862,29 @@ func parseStartJob(name string) {
 		toSend := message.MakeShareJobMessage(*WorkerNode.GetNodeInfo(), *job)
 		broadcastMessage(&WorkerNode, toSend)
 	}
-	go startJob(job)
+	job.Working = true
+	allJobs[job.Name] = job
+	ReorganizeSystem()
+	// go startJob(job)
 }
 
 func parseStopJob(name string) {
 	LogFileChan <- "Stopping job: " + name
 	job, ok := allJobs[name]
 	if !ok {
-		LogErrorChan <- "There is no job: " + name + ". Error new job"
+		LogErrorChan <- "There is no job: " + name + ". Error no job to stop"
 
-		JobProccesingPoisonChan <- 1
+		// JobProccesingPoisonChan <- 1
 
-		toSend := message.MakeShareJobMessage(*WorkerNode.GetNodeInfo(), *job)
-		broadcastMessage(&WorkerNode, toSend)
+		// toSend := message.MakeShareJobMessage(*WorkerNode.GetNodeInfo(), *job)
+		// broadcastMessage(&WorkerNode, toSend)
+		return
 	}
+
+	job.Working = false
+	allJobs[job.Name] = job
+	ReorganizeSystem()
+
 }
 
 func parseResultJob(args string) {
@@ -857,6 +906,131 @@ func parseResultJob(args string) {
 	job.MakeImage(IMAGE_PATH)
 }
 
+func allJobsStatus() int {
+	for _, node := range WorkerNode.SystemInfo {
+		msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
+		nextNode := findNextNode(node)
+
+		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+	}
+
+	nodeWaiting := len(WorkerNode.SystemInfo)
+
+	JobStatusWaitingGroup.Add(nodeWaiting)
+	JobStatusWaitingGroup.Wait()
+
+	jobStatusMap := make(map[string]job.JobStatus)
+
+	for i := 0; i < nodeWaiting; i++ {
+		tmpJobStatus := <-JobStatusChannel
+		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
+			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
+		} else {
+			val.WorkingNodes++
+			val.PointsGenerated += tmpJobStatus.PointsGenerated
+			for key := range tmpJobStatus.PointsPerNodes {
+				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
+			}
+		}
+	}
+
+	return nodeWaiting
+}
+
+func oneJobStatus(name string) int {
+
+	nodeWaiting := 0
+
+	for _, node := range WorkerNode.SystemInfo {
+		if strings.EqualFold(name, node.JobName) {
+			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
+			nextNode := findNextNode(node)
+
+			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+			nodeWaiting++
+		}
+	}
+
+	JobStatusWaitingGroup.Add(nodeWaiting)
+	JobStatusWaitingGroup.Wait()
+
+	jobStatusMap := make(map[string]job.JobStatus)
+
+	for i := 0; i < nodeWaiting; i++ {
+		tmpJobStatus := <-JobStatusChannel
+		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
+			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
+		} else {
+			val.WorkingNodes++
+			val.PointsGenerated += tmpJobStatus.PointsGenerated
+			for key := range tmpJobStatus.PointsPerNodes {
+				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
+			}
+		}
+	}
+
+	return nodeWaiting
+}
+
+func oneNodeJobStatus(name, fractalID string) int {
+	for _, node := range WorkerNode.SystemInfo {
+		if strings.EqualFold(name, node.JobName) {
+			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
+			nextNode := findNextNode(node)
+
+			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+			break
+		}
+	}
+
+	JobStatusWaitingGroup.Add(1)
+	JobStatusWaitingGroup.Wait()
+
+	return 1
+}
+
+func parseStatusJob(args string) {
+	LogFileChan <- "Status getting: " + args
+
+	args_array := strings.SplitN(args, " ", 2)
+
+	nodeWaiting := 0
+
+	switch len(args_array) {
+	case 0:
+		nodeWaiting = allJobsStatus()
+	case 1:
+		nodeWaiting = oneJobStatus(args_array[0])
+	case 2:
+		nodeWaiting = oneNodeJobStatus(args_array[0], args_array[1])
+	default:
+		LogErrorChan <- "wrong number of arguments: " + args
+	}
+
+	jobStatusMap := make(map[string]job.JobStatus)
+
+	for i := 0; i < nodeWaiting; i++ {
+		tmpJobStatus := <-JobStatusChannel
+		if val, ok := jobStatusMap[tmpJobStatus.Name]; !ok {
+			jobStatusMap[tmpJobStatus.Name] = tmpJobStatus
+		} else {
+			val.WorkingNodes++
+			val.PointsGenerated += tmpJobStatus.PointsGenerated
+			for key := range tmpJobStatus.PointsPerNodes {
+				val.PointsPerNodes[key] = tmpJobStatus.PointsPerNodes[key]
+			}
+		}
+	}
+
+	for _, jobstat := range jobStatusMap {
+		fmt.Printf("Job %s with %d Working nodes has %d generated points\n", jobstat.Name, jobstat.WorkingNodes, jobstat.PointsGenerated)
+		for key, val := range jobstat.PointsPerNodes {
+			fmt.Printf("\t %s] %d\n", key, val)
+		}
+		fmt.Println("-----------------------------")
+	}
+}
+
 func parseCommand(commandArg string) bool {
 
 	command_arr := strings.SplitN(commandArg, " ", 2)
@@ -872,6 +1046,8 @@ func parseCommand(commandArg string) bool {
 		parseResultJob(command_arr[1])
 	} else if strings.EqualFold(command, "stop") {
 		parseStopJob(command_arr[1])
+	} else if strings.EqualFold(command, "status") {
+		parseStatusJob(command_arr[1])
 	} else {
 		fmt.Printf("Unknown command: %s\n", command)
 	}
@@ -903,7 +1079,7 @@ func listenCommand(listenChan chan int32) {
 
 func findNextNode(goal node.NodeInfo) node.NodeInfo {
 
-	if WorkerNode.Prev == goal.Port || WorkerNode.Next == goal.Port {
+	if WorkerNode.Prev == goal.Id || WorkerNode.Next == goal.Id {
 		return goal
 	}
 

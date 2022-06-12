@@ -37,6 +37,9 @@ const (
 	ClusterWelcome            MessageType = 23
 	StopShareJob              MessageType = 24
 	StoppedJobInfo            MessageType = 25
+	AskForJob                 MessageType = 26
+	JobStatusRequest          MessageType = 27
+	JobStatus                 MessageType = 28
 )
 
 type MessageCounter struct {
@@ -540,6 +543,59 @@ func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobInput job.Job) 
 	msgReturn.Message = string(jsonstr)
 
 	msgReturn.MessageType = StoppedJobInfo
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeStoppedAskForJobMessage(sender, reciver node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	msgReturn.Message = "AskForJob"
+
+	msgReturn.MessageType = AskForJob
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeJobStatusRequestMessage(sender, reciver node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	msgReturn.Message = "JobStatusRequest"
+
+	msgReturn.MessageType = JobStatusRequest
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeJobStatusMessage(sender, reciver node.NodeInfo, jobStatus job.JobStatus) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+
+	jsonstr, _ := json.Marshal(jobStatus)
+
+	msgReturn.Message = string(jsonstr)
+
+	msgReturn.MessageType = JobStatus
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
