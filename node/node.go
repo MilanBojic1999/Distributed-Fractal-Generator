@@ -50,7 +50,7 @@ func (b *Bootstrap) GetNodeInfo() *NodeInfo {
 }
 
 type Worker struct {
-	Id          int                 `json:"nodeId"`
+	Id          int                 `json:"Id"`
 	IpAddress   string              `json:"ipAddress"`
 	Port        int                 `json:"port"`
 	Prev        int                 `json:"-"`
@@ -91,11 +91,15 @@ func (w *Worker) GetNodeInfo() *NodeInfo {
 	return toReturn
 }
 
+func (w *Worker) String() string {
+	return fmt.Sprintf("%d >< %s:%d (%s:%s) NEXT: %d & PREV: %d", w.Id, w.IpAddress, w.Port, w.JobName, w.FractalId, w.Next, w.Prev)
+}
+
 type NodeInfo struct {
-	Id        int    `json:"nodeId"`
+	Id        int    `json:"Id"`
 	IpAddress string `json:"ipAddress"`
 	Port      int    `json:"port"`
-	JobName   string `json:"JobId"`
+	JobName   string `json:"JobName"`
 	FractalId string `json:"FractalId"`
 }
 
@@ -104,5 +108,5 @@ func (w *NodeInfo) GetFullAddress() string {
 }
 
 func (w *NodeInfo) String() string {
-	return fmt.Sprintf("%d >< %s:%d", w.Id, w.IpAddress, w.Port)
+	return fmt.Sprintf("%d >< %s:%d (%s:%s)", w.Id, w.IpAddress, w.Port, w.JobName, w.FractalId)
 }

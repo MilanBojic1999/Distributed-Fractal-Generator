@@ -730,8 +730,14 @@ func makeInitConnections() {
 	tmpNI := WorkerNode.SystemInfo[0]
 	sendMessage(WorkerNode.GetNodeInfo(), &tmpNI, toSendNext)
 
-	toSendPrev := message.MakeConnectionRequestMessage(*WorkerNode.GetNodeInfo(), WorkerNode.SystemInfo[WorkerNode.Id-1], message.Prev)
-	tmpNI = WorkerNode.SystemInfo[WorkerNode.Id-1]
+	prevNode := WorkerNode.SystemInfo[WorkerNode.Id-1]
+
+	fmt.Println((&prevNode).String())
+	fmt.Println(WorkerNode.String())
+
+	fmt.Println(WorkerNode.SystemInfo)
+	toSendPrev := message.MakeConnectionRequestMessage(*WorkerNode.GetNodeInfo(), prevNode, message.Prev)
+	tmpNI = prevNode
 	sendMessage(WorkerNode.GetNodeInfo(), &tmpNI, toSendPrev)
 
 	ConnectionWaitGroup.Wait()
@@ -906,6 +912,13 @@ func parseResultJob(args string) {
 	job.MakeImage(IMAGE_PATH)
 }
 
+func parseListNodes() {
+	fmt.Printf("Listing system nodes for node: %s\n", WorkerNode.String())
+	for ind, n := range WorkerNode.SystemInfo {
+		fmt.Printf("%d> %v\n", ind, n.String())
+	}
+}
+
 func allJobsStatus() int {
 	for _, node := range WorkerNode.SystemInfo {
 		msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
@@ -1048,6 +1061,8 @@ func parseCommand(commandArg string) bool {
 		parseStopJob(command_arr[1])
 	} else if strings.EqualFold(command, "status") {
 		parseStatusJob(command_arr[1])
+	} else if strings.EqualFold(command, "list") {
+		parseListNodes()
 	} else {
 		fmt.Printf("Unknown command: %s\n", command)
 	}
