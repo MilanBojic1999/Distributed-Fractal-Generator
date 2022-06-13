@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/mitchellh/mapstructure"
 )
@@ -28,6 +30,8 @@ func main() {
 	isBootstrap := flag.Bool("bootstrap", false, "Is node a bootstrap")
 
 	flag.Parse()
+
+	rand.Seed(time.Now().UnixNano())
 
 	var bootMap map[string]interface{}
 	dat, err := os.ReadFile(*systemFile)

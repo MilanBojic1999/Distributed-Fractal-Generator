@@ -57,6 +57,10 @@ type JobStatus struct {
 	PointsPerNodes  map[string]int `json:"pointNodes"`
 }
 
+func (js *JobStatus) Log() string {
+	return fmt.Sprintf("Job Status %s, with %d gen points and %d working nodes", js.Name, js.PointsGenerated, js.WorkingNodes)
+}
+
 func (j *Job) GetJobStatus(fractalID string) *JobStatus {
 	jobStatus := new(JobStatus)
 	jobStatus.Name = j.Name

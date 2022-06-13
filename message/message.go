@@ -116,7 +116,7 @@ func (msg *Message) GetMessage() string {
 }
 
 func (msg *Message) Log() string {
-	return fmt.Sprintf("%d¦%d¦%d¦%s¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 200))
+	return fmt.Sprintf("%d¦%d¦%d¦%s¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 500))
 }
 
 func (msg *Message) MakeMeASender(node node.INode) IMessage {

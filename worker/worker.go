@@ -461,7 +461,7 @@ func proccesJobSharing(msgStruct message.Message) {
 
 	workingJob = jobInput
 
-	LogFileChan <- "Starting new job: " + workingJob.Log()
+	LogFileChan <- "Starting new job: " + workingJob.Log() + fmt.Sprintf("TT: %p", workingJob)
 
 	allJobs[workingJob.Name].Working = true
 
@@ -486,7 +486,7 @@ func proccesJobStatusRequest(msgStruct message.Message) {
 		LogErrorChan <- "Asked for Job status but there is no job"
 	} else {
 		jobStatus = *workingJob.GetJobStatus(WorkerNode.FractalId)
-		LogFileChan <- "Asked for Job status: " + jobStatus.Name
+		LogFileChan <- "Asked for Job status: " + jobStatus.Log() + fmt.Sprintf(" PP: %p", workingJob)
 	}
 
 	toSend := message.MakeJobStatusMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), jobStatus)
@@ -692,9 +692,9 @@ func splitWorkingJob() {
 		sendMessage(WorkerNode.GetNodeInfo(), &waitingChildrenArray[ind-1], toSend)
 	}
 
-	workingJob = scaleJob(workingJob, workingJob.MainPoints[0], scale)
+	*workingJob = *scaleJob(workingJob, workingJob.MainPoints[0], scale)
 	waitingChildrenArray = make([]node.NodeInfo, 0)
-	LogFileChan <- "Staring partial job: " + workingJob.Log()
+	LogFileChan <- "Staring partial job: " + workingJob.Log() + ""
 
 	go startJob(workingJob)
 }
@@ -812,7 +812,9 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 		LogErrorChan <- "Asked for image info but dont having job"
 	}
 
-	toSend := message.MakeImageInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, *workingJob)
+	tmpJob := *workingJob
+
+	toSend := message.MakeImageInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, tmpJob)
 
 	nextNode := findNextNode(msgStruct.GetSender())
 
@@ -883,20 +885,21 @@ func nextPoint(start, end structures.Point, ratio float64) structures.Point {
 	return structures.Point{X: int(new_x), Y: int(new_y)}
 }
 
-func startJob(job *job.Job) {
-	point := job.MainPoints[0]
+func startJob(jobInput *job.Job) {
+	point := jobInput.MainPoints[0]
+	ratio := jobInput.Ration
 	for {
 		select {
 		case <-JobProccesingPoisonChan:
-			LogFileChan <- "Ending job:" + job.Name
+			LogFileChan <- "Ending job:" + jobInput.Name
 			return
 		default:
-			indPoint := rand.Intn(job.PointCount)
-			point = nextPoint(point, job.MainPoints[indPoint], job.Ration)
-			// LogFileChan <- fmt.Sprintf("New point: %v to Main point: %v", point, job.MainPoints[indPoint])
-			job.Points = append(job.Points, point)
+			indPoint := rand.Intn(jobInput.PointCount)
+			point = nextPoint(point, jobInput.MainPoints[indPoint], ratio)
+			// LogFileChan <- fmt.Sprintf("New point: %v to Main point: %v", point, jobInput.MainPoints[indPoint])
+			jobInput.Points = append(jobInput.Points, point)
 		}
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 20)
 	}
 }
 
@@ -996,23 +999,90 @@ func parseStopJob(name string) {
 
 }
 
+func GetOneJobResult(name string) int {
+	nodeWaiting := 0
+
+	for _, node := range WorkerNode.SystemInfo {
+		if strings.EqualFold(name, node.JobName) {
+			msg := message.MakeImageInfoRequestMessage(*WorkerNode.GetNodeInfo(), node)
+			nextNode := findNextNode(node)
+			ImageInfoWaitingGroup.Add(1)
+			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+			nodeWaiting++
+
+		}
+	}
+	LogFileChan <- fmt.Sprintf("Waiting: %d", nodeWaiting)
+	ImageInfoWaitingGroup.Wait()
+
+	return nodeWaiting
+}
+
+func GetOneNodeForJobResult(name, fractalID string) int {
+	for _, node := range WorkerNode.SystemInfo {
+		if strings.EqualFold(name, node.JobName) && strings.EqualFold(fractalID, node.FractalId) {
+			msg := message.MakeImageInfoRequestMessage(*WorkerNode.GetNodeInfo(), node)
+			nextNode := findNextNode(node)
+
+			ImageInfoWaitingGroup.Add(1)
+			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
+			break
+		}
+	}
+
+	ImageInfoWaitingGroup.Wait()
+
+	return 1
+}
+
 func parseResultJob(args string) {
 	LogFileChan <- "Result getting: " + args
 	args_array := strings.SplitN(args, " ", 2)
-	var name, fractalID string
-	name = args_array[0]
-	fractalID = ""
-	if len(args_array) == 2 {
-		fractalID = args_array[1]
-		LogFileChan <- "KOJO " + fractalID
+
+	name := args_array[0]
+	nodeWaiting := 0
+
+	switch len(args_array) {
+	case 1:
+		LogFileChan <- "One job result"
+		nodeWaiting = GetOneJobResult(args_array[0])
+	case 2:
+		LogFileChan <- "One job on one node result"
+		nodeWaiting = GetOneNodeForJobResult(args_array[0], args_array[1])
+	default:
+		LogErrorChan <- "wrong number of arguments: " + args
 	}
 
-	job, ok := allJobs[name]
-	if !ok || !job.Working {
+	jobFinalTmp, ok := allJobs[name]
+	if !ok || !jobFinalTmp.Working {
 		LogErrorChan <- "There is no job: " + name
 		return
 	}
-	job.MakeImage(IMAGE_PATH)
+
+	var jobFinal job.Job
+	jobFinal.Name = jobFinalTmp.Name
+	jobFinal.Width = jobFinalTmp.Width
+	jobFinal.Height = jobFinalTmp.Height
+
+	jobFinal.MainPoints = append(jobFinal.MainPoints, jobFinalTmp.MainPoints...)
+	jobFinal.PointCount = jobFinalTmp.PointCount
+	jobFinal.Points = make([]structures.Point, 0)
+
+	for i := 0; i < nodeWaiting; i++ {
+		tmpJobReuslt := <-ImageInfoChannel
+		if len(tmpJobReuslt.Name) == 0 {
+			continue
+		}
+
+		if strings.EqualFold(tmpJobReuslt.Name, jobFinal.Name) {
+			jobFinal.Points = append(jobFinal.Points, tmpJobReuslt.Points...)
+		} else {
+			LogErrorChan <- "What name is this? " + tmpJobReuslt.Name
+		}
+
+	}
+
+	jobFinal.MakeImage(IMAGE_PATH)
 }
 
 func parseListNodes() {
@@ -1060,7 +1130,7 @@ func oneJobStatus(name string) int {
 
 func oneNodeJobStatus(name, fractalID string) int {
 	for _, node := range WorkerNode.SystemInfo {
-		if strings.EqualFold(name, node.JobName) {
+		if strings.EqualFold(name, node.JobName) && strings.EqualFold(fractalID, node.FractalId) {
 			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
 			nextNode := findNextNode(node)
 
