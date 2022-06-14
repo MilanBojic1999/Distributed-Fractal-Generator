@@ -38,13 +38,13 @@ const (
 	EnteredCluster            MessageType = "EnteredCluster"
 	ClusterConnectionRequest  MessageType = "ClusterConnectionRequest"
 	ClusterConnectionResponse MessageType = "ClusterConnectionResponse"
-	JobSharing                MessageType = "JobSharing"
 	ImageInfoRequest          MessageType = "ImageInfoRequest"
 	ImageInfo                 MessageType = "ImageInfo"
 	SystemKnock               MessageType = "SystemKnock"
 	Purge                     MessageType = "Purge"
 	SharaNewJob               MessageType = "SharaNewJob"
 	StartJob                  MessageType = "StartJob"
+	StartJobGenesis           MessageType = "StartJobGenesis"
 	ApproachCluster           MessageType = "ApproachCluster"
 	ClusterWelcome            MessageType = "ClusterWelcome"
 	StopShareJob              MessageType = "StopShareJob"
@@ -396,24 +396,6 @@ func MakeClusterConnectionResponseMessage(sender, reciver node.NodeInfo, accepte
 	return &msgReturn
 }
 
-func MakeClusterJobSharingMessage(sender, reciver node.NodeInfo, jobInfo job.Job) *Message {
-	msgReturn := Message{}
-
-	msgReturn.Id = int64(MainCounter.Inc())
-	jobstr, _ := json.Marshal(jobInfo)
-	// fmt.Println(string(jobstr))
-	msgReturn.Message = string(jobstr)
-
-	msgReturn.MessageType = JobSharing
-
-	msgReturn.OriginalSender = sender
-	msgReturn.Reciver = reciver
-
-	msgReturn.Route = []int{sender.Id}
-
-	return &msgReturn
-}
-
 func MakeImageInfoRequestMessage(sender, reciver node.NodeInfo) *Message {
 	msgReturn := Message{}
 
@@ -482,12 +464,27 @@ func MakeSharaNewJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
 	return &msgReturn
 }
 
-func MakeStartJobMessage(sender, reciver node.NodeInfo, jobName string) *Message {
+func MakeStartJobMessage(sender, reciver node.NodeInfo) *Message {
+	msgReturn := Message{}
+
+	msgReturn.Id = int64(MainCounter.Inc())
+	msgReturn.Message = "StartJob"
+	msgReturn.MessageType = StartJob
+
+	msgReturn.OriginalSender = sender
+	msgReturn.Reciver = reciver
+
+	msgReturn.Route = []int{sender.Id}
+
+	return &msgReturn
+}
+
+func MakeStartJobGenesisMessage(sender, reciver node.NodeInfo, jobName string) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	msgReturn.Message = jobName
-	msgReturn.MessageType = StartJob
+	msgReturn.MessageType = StartJobGenesis
 
 	msgReturn.OriginalSender = sender
 	msgReturn.Reciver = reciver
