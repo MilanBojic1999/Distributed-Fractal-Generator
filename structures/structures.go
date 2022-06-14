@@ -1,5 +1,10 @@
 package structures
 
+import (
+	"reflect"
+	"strconv"
+)
+
 type Stack []int
 
 func (s *Stack) IsEmpty() bool {
@@ -43,4 +48,22 @@ func (q *Queue) Dequeue() (int, bool) {
 type Point struct {
 	X int `json:"x"`
 	Y int `json:"y"`
+}
+
+type MyFloat float64
+
+func (f MyFloat) MarshalJSON() ([]byte, error) {
+	if float64(f) == float64(int(f)) {
+		return []byte(strconv.FormatFloat(float64(f), 'f', 1, 32)), nil
+	}
+	val := strconv.FormatFloat(float64(f), 'f', 3, 32)
+	return []byte(val), nil
+}
+
+func (f MyFloat) AsFloat() float64 {
+	ref := reflect.ValueOf(f)
+	if ref.Kind() != reflect.Float64 {
+		return 0.0
+	}
+	return float64(ref.Float())
 }

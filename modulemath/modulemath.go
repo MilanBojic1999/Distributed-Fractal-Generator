@@ -17,6 +17,13 @@ func reverse(str string) (result string) {
 	return
 }
 
+func (mm *ModMath) SetN(n int32) {
+	if n < 1 {
+		fmt.Printf("ERROR by " + string(n))
+	}
+	mm.N = n
+}
+
 func (mm *ModMath) IntToMod(input int32) string {
 	var sb strings.Builder
 	for ; input > 0; input /= mm.N {

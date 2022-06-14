@@ -3,6 +3,7 @@ package message
 import (
 	"distributed/job"
 	"distributed/node"
+	"distributed/structures"
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
@@ -400,6 +401,7 @@ func MakeClusterJobSharingMessage(sender, reciver node.NodeInfo, jobInfo job.Job
 
 	msgReturn.Id = int64(MainCounter.Inc())
 	jobstr, _ := json.Marshal(jobInfo)
+	// fmt.Println(string(jobstr))
 	msgReturn.Message = string(jobstr)
 
 	msgReturn.MessageType = JobSharing
@@ -427,11 +429,14 @@ func MakeImageInfoRequestMessage(sender, reciver node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeImageInfoMessage(sender, reciver node.NodeInfo, jobInput job.Job) *Message {
+func MakeImageInfoMessage(sender, reciver node.NodeInfo, jobName string, points []structures.Point) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	points_json, _ := json.Marshal(jobInput)
+
+	outMap := map[string]interface{}{"jobName": jobName, "points": points}
+
+	points_json, _ := json.Marshal(outMap)
 	msgReturn.Message = string(points_json)
 	msgReturn.MessageType = ImageInfo
 
@@ -508,15 +513,14 @@ func MakeApproachClusterMessage(sender, reciver, contact node.NodeInfo) *Message
 	return &msgReturn
 }
 
-func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID, jobName string, ClusterInfo map[int]node.NodeInfo) *Message {
+func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID, jobName string) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	jsonstr, _ := json.Marshal(ClusterInfo)
 
-	sentMap := map[string]string{"fractalID": fractalID, "jobName": jobName, "ClusterInfo": string(jsonstr)}
+	sentMap := map[string]string{"fractalID": fractalID, "jobName": jobName}
 
-	jsonstr, _ = json.Marshal(sentMap)
+	jsonstr, _ := json.Marshal(sentMap)
 
 	msgReturn.Message = string(jsonstr)
 	msgReturn.MessageType = ClusterWelcome
@@ -545,14 +549,16 @@ func MakeStopShareJobMessage(sender, reciver node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobInput job.Job) *Message {
+func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobName string, points []structures.Point) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	jsonstr, _ := json.Marshal(jobInput)
+	outMap := map[string]interface{}{"jobName": jobName, "points": points}
 
-	msgReturn.Message = string(jsonstr)
+	points_json, _ := json.Marshal(outMap)
+
+	msgReturn.Message = string(points_json)
 
 	msgReturn.MessageType = StoppedJobInfo
 

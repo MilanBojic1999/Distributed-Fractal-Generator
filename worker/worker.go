@@ -70,7 +70,7 @@ var WorkerNode node.Worker
 var ModMath modulemath.ModMath
 
 var ImageInfoWaitingGroup sync.WaitGroup
-var ImageInfoChannel chan job.Job
+var ImageInfoChannel chan map[string]any
 
 var JobStatusWaitingGroup sync.WaitGroup
 var JobStatusChannel chan job.JobStatus
@@ -85,6 +85,8 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 	WorkerNode = node.Worker{}
 	WorkerNode.IpAddress = ipAddres
 	WorkerNode.Port = port
+
+	WorkerNode.Connections = make(map[string]node.NodeInfo)
 
 	WorkerNode.SystemInfo = make(map[int]node.NodeInfo)
 	fmt.Printf("\nWut: %v\n", jobs)
@@ -119,7 +121,7 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 		check(err, "LogFile")
 	}
 
-	ImageInfoChannel = make(chan job.Job, 100)
+	ImageInfoChannel = make(chan map[string]any, 100)
 	JobStatusChannel = make(chan job.JobStatus, 100)
 
 	EnterenceChannel = make(chan int, 1)
@@ -461,8 +463,8 @@ func proccesJobSharing(msgStruct message.Message) {
 
 	workingJob = jobInput
 
-	LogFileChan <- "Starting new job: " + workingJob.Log() + fmt.Sprintf("TT: %p", workingJob)
-
+	LogFileChan <- "Starting new job: " + workingJob.Log() + fmt.Sprintf("lent: %d cap: %d TT: %p", len(workingJob.Points), cap(workingJob.Points), workingJob)
+	LogFileChan <- fmt.Sprintf("Neew Jobo %s reatit %f", workingJob.Name, workingJob.Ratio)
 	allJobs[workingJob.Name].Working = true
 
 	go startJob(workingJob)
@@ -510,7 +512,7 @@ func proccesClusterKnock(msgStruct message.Message) {
 	fmt.Printf("%v\n\n", WorkerNode.SystemInfo)
 	nextOne := ModMath.NextOne(lastFractalID)
 
-	toSend := message.MakeClusterWelcomeMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), nextOne, workingJob.Name, clusterInfo)
+	toSend := message.MakeClusterWelcomeMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), nextOne, workingJob.Name)
 	sendMessage(WorkerNode.GetNodeInfo(), &msgStruct.OriginalSender, toSend)
 }
 
@@ -526,16 +528,24 @@ func proccesClusterWelcome(msgStruct message.Message) {
 	fmt.Println(fractalID, " @@ ", jobName)
 	fmt.Println("--------------------------")
 
+	ModMath.SetN(int32(allJobs[jobName].PointCount))
+
 	var ClusterInfoMap map[int]node.NodeInfo
 	json.Unmarshal([]byte(input["ClusterInfo"]), &ClusterInfoMap)
+
+	WorkerNode.FractalId = fractalID
+	WorkerNode.JobName = jobName
 
 	for _, val := range ClusterInfoMap {
 		WorkerNode.SystemInfo[val.Id] = val
 		clusterMap[val.FractalId] = val
+		LogFileChan <- fmt.Sprintf("Cluster connection: %d", modulemath.EditDistance(fractalID, val.FractalId))
+		if modulemath.EditDistance(fractalID, val.FractalId) == 1 {
+			toSendic := message.MakeClusterConnectionRequestMessage(*WorkerNode.GetNodeInfo(), val)
+			nextNode := findNextNode(val)
+			go sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSendic)
+		}
 	}
-
-	WorkerNode.FractalId = fractalID
-	WorkerNode.JobName = jobName
 
 	for _, val := range WorkerNode.SystemInfo {
 		toSend := message.MakeEnteredClusterMessage(*WorkerNode.GetNodeInfo(), val, *WorkerNode.GetNodeInfo())
@@ -552,14 +562,14 @@ func proccesStopShareJob(msgStruct message.Message) {
 		var dummyJob job.Job
 		dummyJob.Name = "NumbijanacNarnijacan"
 
-		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), dummyJob)
+		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), "", []structures.Point{})
 		nextNode := findNextNode(msgStruct.OriginalSender)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 	} else {
 		JobProccesingPoisonChan <- 1
 		LogFileChan <- "Stopping and Sharing job: " + workingJob.Name
 
-		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), *workingJob)
+		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), workingJob.Name, workingJob.Points)
 		nextNode := findNextNode(msgStruct.OriginalSender)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 
@@ -578,7 +588,7 @@ func proccesStopShareJob(msgStruct message.Message) {
 
 func proccesStoppedJobInfo(msgStruct message.Message) {
 
-	var tmpJob job.Job
+	var tmpJob map[string]any
 	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
 
 	ImageInfoChannel <- tmpJob
@@ -611,10 +621,14 @@ func ReorganizeSystem() {
 
 	for j := 0; j < len(WorkerNode.SystemInfo); j++ {
 		tmpJob := <-ImageInfoChannel
-		if val, ok := WorkingJobsMap[tmpJob.Name]; !ok {
-			LogErrorChan <- "Unknown working job: " + tmpJob.Log()
+		jobName := tmpJob["jobName"].(string)
+		ppoints := make([]structures.Point, 0)
+		mapstructure.Decode(tmpJob["points"], &ppoints)
+
+		if val, ok := WorkingJobsMap[jobName]; !ok {
+			LogErrorChan <- "Unknown working job: " + jobName
 		} else {
-			val.Points = append(val.Points, tmpJob.Points...)
+			val.Points = append(val.Points, ppoints...)
 			WorkingJobsMap[val.Name] = val
 		}
 	}
@@ -664,6 +678,7 @@ func scaleJob(jobInput *job.Job, scalePoint structures.Point, scale float64) *jo
 	newJob.PointCount = jobInput.PointCount
 	newJob.Height = jobInput.Height
 	newJob.Width = jobInput.Width
+	newJob.Ratio = jobInput.Ratio
 	newJob.MainPoints = make([]structures.Point, newJob.PointCount)
 	newJob.Points = make([]structures.Point, 0)
 
@@ -709,7 +724,7 @@ func proccesEnteredCluster(msgStruct message.Message) {
 		return
 	}
 
-	if len(WorkerNode.FractalId) > 0 && workingJob != nil &&
+	if len(WorkerNode.FractalId) > 0 && workingJob != nil && strings.EqualFold(WorkerNode.JobName, nodeInput.JobName) &&
 		(strings.HasPrefix(nodeInput.FractalId, WorkerNode.FractalId) || (len(nodeInput.FractalId) == 1 && len(WorkerNode.FractalId) == 1)) {
 		LogFileChan <- fmt.Sprintf("Node %v is waiting,", nodeInput.String())
 		childrenWaiting++
@@ -738,9 +753,15 @@ func proccesClusterConnectionRequest(msgStruct message.Message) {
 
 	sender := msgStruct.GetSender()
 
+	if modulemath.EditDistance(sender.FractalId, WorkerNode.FractalId) != 1 {
+		LogFileChan <- "Cluster connection with " + sender.String()
+		toSend := message.MakeClusterConnectionResponseMessage(*WorkerNode.GetNodeInfo(), sender, false)
+		sendMessage(WorkerNode.GetNodeInfo(), &sender, toSend)
+	}
+
 	WorkerNode.Connections[sender.FractalId] = sender
 	LogFileChan <- "Cluster connection with " + sender.String()
-	toSend := message.MakeClusterConnectionResponseMessage(sender, *WorkerNode.GetNodeInfo(), true)
+	toSend := message.MakeClusterConnectionResponseMessage(*WorkerNode.GetNodeInfo(), sender, true)
 	sendMessage(WorkerNode.GetNodeInfo(), &sender, toSend)
 }
 
@@ -814,7 +835,7 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 
 	tmpJob := *workingJob
 
-	toSend := message.MakeImageInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, tmpJob)
+	toSend := message.MakeImageInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.OriginalSender, tmpJob.Name, tmpJob.Points)
 
 	nextNode := findNextNode(msgStruct.GetSender())
 
@@ -824,7 +845,7 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 
 func proccesImageInfoResponse(msgStruct message.Message) {
 
-	var tmpJob job.Job
+	var tmpJob map[string]any
 	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
 
 	ImageInfoChannel <- tmpJob
@@ -887,7 +908,7 @@ func nextPoint(start, end structures.Point, ratio float64) structures.Point {
 
 func startJob(jobInput *job.Job) {
 	point := jobInput.MainPoints[0]
-	ratio := jobInput.Ration
+	ratio := jobInput.Ratio
 	for {
 		select {
 		case <-JobProccesingPoisonChan:
@@ -895,7 +916,7 @@ func startJob(jobInput *job.Job) {
 			return
 		default:
 			indPoint := rand.Intn(jobInput.PointCount)
-			point = nextPoint(point, jobInput.MainPoints[indPoint], ratio)
+			point = nextPoint(point, jobInput.MainPoints[indPoint], ratio.AsFloat())
 			// LogFileChan <- fmt.Sprintf("New point: %v to Main point: %v", point, jobInput.MainPoints[indPoint])
 			jobInput.Points = append(jobInput.Points, point)
 		}
@@ -961,7 +982,7 @@ func AskForNewJob(name string) *job.Job {
 	newJob.PointCount = pointCount
 	newJob.Height = height
 	newJob.Width = width
-	newJob.Ration = float64(ration)
+	newJob.Ratio = structures.MyFloat(ration)
 	newJob.MainPoints = points
 	newJob.Points = make([]structures.Point, 1)
 
@@ -993,7 +1014,7 @@ func parseStopJob(name string) {
 	}
 
 	job.Working = false
-	job.Points = make([]structures.Point, 0, 100)
+	job.Points = make([]structures.Point, 0)
 	allJobs[job.Name] = job
 	ReorganizeSystem()
 
@@ -1070,14 +1091,17 @@ func parseResultJob(args string) {
 
 	for i := 0; i < nodeWaiting; i++ {
 		tmpJobReuslt := <-ImageInfoChannel
-		if len(tmpJobReuslt.Name) == 0 {
+		jobName := tmpJobReuslt["jobName"].(string)
+		ppoints := make([]structures.Point, 0)
+		mapstructure.Decode(tmpJobReuslt["points"], &ppoints)
+		if len(jobName) == 0 {
 			continue
 		}
 
-		if strings.EqualFold(tmpJobReuslt.Name, jobFinal.Name) {
-			jobFinal.Points = append(jobFinal.Points, tmpJobReuslt.Points...)
+		if strings.EqualFold(jobName, jobFinal.Name) {
+			jobFinal.Points = append(jobFinal.Points, ppoints...)
 		} else {
-			LogErrorChan <- "What name is this? " + tmpJobReuslt.Name
+			LogErrorChan <- "What name is this? " + jobName
 		}
 
 	}
@@ -1237,11 +1261,13 @@ func listenCommand(listenChan chan int32) {
 	fmt.Println("---------------------")
 
 	input := make(chan string)
-	go func(in chan string) {
+	wainchanel := make(chan string)
+	go func(in, waitchan chan string) {
 		// create new reader from stdin
 		reader := bufio.NewReader(os.Stdin)
 		// start infinite loop to continuously listen to input
 		for {
+			fmt.Print(":> ")
 			// read by one line (enter pressed)
 			text, err := reader.ReadString('\n')
 			// check for errors
@@ -1252,9 +1278,10 @@ func listenCommand(listenChan chan int32) {
 			}
 			text = strings.Replace(text, "\n", "", -1)
 			in <- text
+			<-waitchan
 		}
 		// pass input channel to closure func
-	}(input)
+	}(input, wainchanel)
 
 	for {
 		select {
@@ -1264,6 +1291,7 @@ func listenCommand(listenChan chan int32) {
 			if !parseCommand(text) {
 				return
 			}
+			wainchanel <- " "
 		}
 	}
 }

@@ -13,7 +13,7 @@ import (
 type Job struct {
 	Name       string             `json:"name"`
 	PointCount int                `json:"pointCount"`
-	Ration     float64            `json:"ratio"`
+	Ratio      structures.MyFloat `json:"ratio"`
 	Width      int                `json:"width"`
 	Height     int                `json:"height"`
 	MainPoints []structures.Point `json:"mainPoints"`
@@ -22,7 +22,7 @@ type Job struct {
 }
 
 func (job *Job) Log() string {
-	return fmt.Sprintf("Job %s: [%d %f] Resolution: %d x %d", job.Name, job.PointCount, job.Ration, job.Height, job.Width)
+	return fmt.Sprintf("Job %s: [%d %f] Resolution: %d x %d", job.Name, job.PointCount, job.Ratio, job.Height, job.Width)
 }
 
 func (job *Job) MakeImage(path string) {
@@ -64,7 +64,11 @@ func (js *JobStatus) Log() string {
 func (j *Job) GetJobStatus(fractalID string) *JobStatus {
 	jobStatus := new(JobStatus)
 	jobStatus.Name = j.Name
-	jobStatus.PointsGenerated = len(j.Points)
+	tmpMap := make(map[structures.Point]bool)
+	for _, p := range j.Points {
+		tmpMap[p] = true
+	}
+	jobStatus.PointsGenerated = len(tmpMap)
 	jobStatus.WorkingNodes = 1
 	jobStatus.PointsPerNodes = make(map[string]int)
 	jobStatus.PointsPerNodes[fractalID] = jobStatus.PointsGenerated

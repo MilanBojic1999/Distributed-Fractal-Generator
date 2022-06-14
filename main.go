@@ -53,6 +53,8 @@ func main() {
 
 		JobList = ParseJobJson(jobs_interface)
 
+		// mapstructure.Decode(jobs_interface, JobList)
+
 		fmt.Printf("%T %v\n", jobs_interface, jobs_interface)
 		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), JobList, *FILE_SEPARATOR)
 	}
@@ -87,7 +89,8 @@ func makeJob(j map[string]interface{}) job.Job {
 	jobr := new(job.Job)
 	jobr.Name = j["name"].(string)
 	jobr.PointCount = int(j["pointCount"].(float64))
-	jobr.Ration, _ = strconv.ParseFloat(j["ratio"].(string), 32)
+	tmp_float, _ := strconv.ParseFloat(j["ratio"].(string), 32)
+	jobr.Ratio = structures.MyFloat(tmp_float)
 	jobr.Width = int(j["width"].(float64))
 	jobr.Height = int(j["height"].(float64))
 

@@ -92,6 +92,7 @@ func listenOnPort(listenChan chan int32) {
 			return
 		default:
 			inMsg, err := ln.Accept()
+
 			if err != nil {
 				if err, ok := err.(net.Error); ok {
 					check(err, "(net.Error)")
@@ -215,11 +216,13 @@ func listenCommand(listenChan chan int32) {
 	fmt.Println("---------------------")
 
 	input := make(chan string)
-	go func(in chan string) {
+	wainchanel := make(chan string)
+	go func(in, waitchan chan string) {
 		// create new reader from stdin
 		reader := bufio.NewReader(os.Stdin)
 		// start infinite loop to continuously listen to input
 		for {
+			fmt.Print(":> ")
 			// read by one line (enter pressed)
 			text, err := reader.ReadString('\n')
 			// check for errors
@@ -230,9 +233,10 @@ func listenCommand(listenChan chan int32) {
 			}
 			text = strings.Replace(text, "\n", "", -1)
 			in <- text
+			<-waitchan
 		}
 		// pass input channel to closure func
-	}(input)
+	}(input, wainchanel)
 
 	for {
 		select {
@@ -242,6 +246,7 @@ func listenCommand(listenChan chan int32) {
 			if !parseCommand(text) {
 				return
 			}
+			wainchanel <- " "
 		}
 	}
 }
