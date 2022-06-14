@@ -211,24 +211,37 @@ func parseCommand(commandArg string) bool {
 }
 
 func listenCommand(listenChan chan int32) {
-	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Simple Shell")
 	fmt.Println("---------------------")
+
+	input := make(chan string)
+	go func(in chan string) {
+		// create new reader from stdin
+		reader := bufio.NewReader(os.Stdin)
+		// start infinite loop to continuously listen to input
+		for {
+			// read by one line (enter pressed)
+			text, err := reader.ReadString('\n')
+			// check for errors
+			if err != nil {
+				// close channel just to inform others
+				close(in)
+				LogErrorChan <- fmt.Sprintln("Error in read string", err)
+			}
+			text = strings.Replace(text, "\n", "", -1)
+			in <- text
+		}
+		// pass input channel to closure func
+	}(input)
 
 	for {
 		select {
 		case <-listenChan:
 			return
-		default:
-			fmt.Print(":> ")
-			text, _ := reader.ReadString('\n')
-
-			text = strings.Replace(text, "\n", "", -1)
-
+		case text := <-input:
 			if !parseCommand(text) {
 				return
 			}
-
 		}
 	}
 }
