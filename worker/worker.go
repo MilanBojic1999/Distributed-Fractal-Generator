@@ -158,6 +158,12 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 		makeInitConnections()
 	}
 
+	if len(WorkerNode.SystemInfo[0].JobName) > 0 {
+		contact := WorkerNode.SystemInfo[0]
+		toSend := message.MakeStoppedAskForJobMessage(*WorkerNode.GetNodeInfo(), contact)
+		sendMessage(WorkerNode.GetNodeInfo(), &contact, toSend)
+	}
+
 	listenCommand(CommandPortListenChan)
 
 	fmt.Println("JOH")
@@ -200,7 +206,7 @@ func listenOnPort(listenChan chan int32) {
 				inMsg.Close()
 			}
 		}
-		time.Sleep(time.Millisecond * 200)
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
@@ -404,25 +410,6 @@ func proccesSystemKnockMessage(msgStruct message.Message) {
 	toSand := message.MakeWelcomeMessage(*WorkerNode.GetNodeInfo(), reciver, nextIndex, WorkerNode.SystemInfo)
 	sendMessage(WorkerNode.GetNodeInfo(), &reciver, toSand)
 
-	if len(WorkerNode.JobName) > 0 {
-
-		noWorkingJobs := 0
-
-		for _, job := range allJobs {
-			noWorkingJobs++
-			fmt.Printf("WORKING: %s  %d\n", job.Name, len(job.Points))
-		}
-
-		contactId := int((float64(nextIndex)/float64(noWorkingJobs))-1.0) * noWorkingJobs
-
-		contact := WorkerNode.SystemInfo[contactId]
-
-		msg := message.MakeApproachClusterMessage(*WorkerNode.GetNodeInfo(), reciver, contact)
-		// nextNode := findNextNode(reciver)
-		sendMessage(WorkerNode.GetNodeInfo(), &reciver, msg)
-
-	}
-
 }
 
 func proccesEnteredMessage(msgStruct message.Message) {
@@ -489,6 +476,8 @@ func proccesJobStatus(msgStruct message.Message) {
 func proccesJobStatusRequest(msgStruct message.Message) {
 
 	var jobStatus job.JobStatus
+	jobStatus.Name = WorkerNode.JobName
+	jobStatus.PointsPerNodes = map[string]int{WorkerNode.FractalId: -1}
 
 	if workingJob == nil {
 		LogErrorChan <- "Asked for Job status but there is no job"
@@ -588,7 +577,7 @@ func proccesStopShareJob(msgStruct message.Message) {
 
 		WorkerNode.JobName = ""
 		WorkerNode.FractalId = ""
-
+		clusterMap = make(map[string]node.NodeInfo)
 		WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
 
 		updateNode()
@@ -599,6 +588,8 @@ func proccesStopShareJob(msgStruct message.Message) {
 	} else {
 		JobProccesingPoisonChan <- 1
 		LogFileChan <- "Stopping and Sharing job: " + workingJob.Name
+
+		clusterMap = make(map[string]node.NodeInfo)
 
 		WorkerNode.JobName = ""
 		WorkerNode.FractalId = ""
@@ -695,15 +686,17 @@ func ReorganizeSystem(intrusiveJob *job.Job) {
 
 	// jobInd := 0
 
-	for ; i < len(WorkerNode.SystemInfo); i++ {
+	for i = noWorkingJobs; i < len(WorkerNode.SystemInfo); i++ {
 
 		reciver := WorkerNode.SystemInfo[i]
 
 		// jobInd := reciver.Id % noWorkingJobs
 
-		contactId := int((float64(reciver.Id)/float64(noWorkingJobs))-1.0) * noWorkingJobs
+		contactId := reciver.Id - noWorkingJobs
 
 		contact := WorkerNode.SystemInfo[contactId]
+
+		LogFileChan <- fmt.Sprintf("%s to %s to cLust %d", &reciver, &contact, contactId)
 
 		msg := message.MakeApproachClusterMessage(*WorkerNode.GetNodeInfo(), reciver, contact)
 		nextNode := findNextNode(reciver)
@@ -764,11 +757,14 @@ func proccesEnteredCluster(msgStruct message.Message) {
 	json.Unmarshal([]byte(msgStruct.Message), &nodeInput)
 
 	if _, ok := clusterMap[nodeInput.FractalId]; ok {
-		LogErrorChan <- fmt.Sprintf("Node with the same fractalId %s in Cluster", nodeInput.FractalId)
-		return
+		LogErrorChan <- fmt.Sprintf("Node with the same fractalId %s>> %s in Cluster  %v", nodeInput.FractalId, nodeInput.String(), clusterMap)
+		// return
 	}
 
 	if len(WorkerNode.FractalId) > 0 && workingJob != nil && strings.EqualFold(WorkerNode.JobName, nodeInput.JobName) {
+
+		clusterMap[nodeInput.FractalId] = nodeInput
+
 		if strings.HasPrefix(nodeInput.FractalId, WorkerNode.FractalId) {
 			LogFileChan <- fmt.Sprintf("Node %v is waiting,(1)", nodeInput.String())
 			childrenWaiting++
@@ -793,7 +789,7 @@ func proccesEnteredCluster(msgStruct message.Message) {
 	}
 
 	WorkerNode.SystemInfo[nodeInput.Id] = nodeInput
-	clusterMap[nodeInput.FractalId] = nodeInput
+
 	if len(nodeInput.JobName) > 0 {
 		tmpJob := allJobs[nodeInput.JobName]
 		tmpJob.Working = true
@@ -1400,27 +1396,31 @@ func findNextNode(goal node.NodeInfo) node.NodeInfo {
 	if len(WorkerNode.FractalId) == 0 || len(goal.FractalId) == 0 {
 		return nextNode
 	}
-	editDist := modulemath.EditDistance(WorkerNode.FractalId, goal.FractalId)
+	if len(goal.FractalId) > 0 {
 
-	if minDist > editDist {
-		myArr := []rune(WorkerNode.FractalId)
-		goalArr := []rune(goal.FractalId)
+		editDist := modulemath.EditDistance(WorkerNode.FractalId, goal.FractalId)
 
-		sze := len(myArr)
-		if sze > len(goalArr) {
-			sze = len(goalArr)
-		}
+		if minDist > editDist {
+			myArr := []rune(WorkerNode.FractalId)
+			goalArr := []rune(goal.FractalId)
 
-		for i := 0; i < sze; i++ {
-			var tmpArr []rune
-			copy(tmpArr, myArr)
-			tmpArr[i] = goalArr[i]
-			if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
-				nextNode = v
-				break
+			sze := len(myArr)
+			if sze > len(goalArr) {
+				sze = len(goalArr)
+			}
+			fmt.Printf("sze::: %d ¤¤ %v ¤¤ %v\n", sze, string(myArr), string(goalArr))
+
+			for i := 0; i < sze; i++ {
+				tmpArr := make([]rune, sze)
+				copy(tmpArr, myArr)
+				fmt.Println("tmparr: ", tmpArr, myArr)
+				tmpArr[i] = goalArr[i]
+				if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
+					nextNode = v
+					break
+				}
 			}
 		}
 	}
-
 	return nextNode
 }

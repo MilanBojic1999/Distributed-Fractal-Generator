@@ -77,15 +77,17 @@ func EditDistance(str1, str2 string) int {
 	arr1 := []rune(str1)
 	arr2 := []rune(str2)
 	lenDiff := len(arr1) - len(arr2)
-	fmt.Printf("%v vs. %v := %d", str1, str2, lenDiff)
+	fmt.Printf("%v vs. %v := %d\n", str1, str2, lenDiff)
 	if lenDiff != 0 {
-		for i := 0; i < lenDiff; i++ {
+		for i := 0; i < (-lenDiff); i++ {
 			arr1 = append(arr1, '0')
 		}
-		for i := 0; i < (-lenDiff); i++ {
+		for i := 0; i < (lenDiff); i++ {
 			arr2 = append(arr2, '0')
 		}
 	}
+
+	fmt.Printf("%s vs. %s := %d\n", string(arr1), string(arr2), lenDiff)
 
 	dist := 0
 	for i := 0; i < len(arr1); i++ {
