@@ -42,7 +42,6 @@ const (
 	ImageInfo                 MessageType = "ImageInfo"
 	SystemKnock               MessageType = "SystemKnock"
 	Purge                     MessageType = "Purge"
-	SharaNewJob               MessageType = "SharaNewJob"
 	StartJob                  MessageType = "StartJob"
 	StartJobGenesis           MessageType = "StartJobGenesis"
 	ApproachCluster           MessageType = "ApproachCluster"
@@ -446,24 +445,6 @@ func MakePurgeMessage(sender node.NodeInfo) *Message {
 	return &msgReturn
 }
 
-func MakeSharaNewJobMessage(sender node.NodeInfo, jobInput job.Job) *Message {
-	msgReturn := Message{}
-
-	msgReturn.Id = int64(MainCounter.Inc())
-	jsonstr, _ := json.Marshal(jobInput)
-	msgReturn.Message = string(jsonstr)
-	msgReturn.MessageType = SharaNewJob
-
-	msgReturn.OriginalSender = sender
-	tmpReciver := new(node.NodeInfo)
-	tmpReciver.Id = -1
-	msgReturn.Reciver = *tmpReciver
-
-	msgReturn.Route = []int{sender.Id}
-
-	return &msgReturn
-}
-
 func MakeStartJobMessage(sender, reciver node.NodeInfo) *Message {
 	msgReturn := Message{}
 
@@ -530,12 +511,14 @@ func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID, jobName
 	return &msgReturn
 }
 
-func MakeStopShareJobMessage(sender, reciver node.NodeInfo) *Message {
+func MakeStopShareJobMessage(sender, reciver node.NodeInfo, jobINput job.Job) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	msgReturn.Message = "StopShareJob"
+	points_json, _ := json.Marshal(jobINput)
+
+	msgReturn.Message = string(points_json)
 	msgReturn.MessageType = StopShareJob
 
 	msgReturn.OriginalSender = sender

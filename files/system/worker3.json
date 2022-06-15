@@ -1,7 +1,7 @@
 {
-    "ipAddress":"172.24.48.113",
-    "port":9003,
-    "bootstrapIpAddress": "172.24.48.113",
+    "ipAddress":"172.24.54.71",
+    "port":9002,
+    "bootstrapIpAddress": "172.24.54.71",
     "bootstrapPort":7777,
     "jobs": [{"name":"Jobo","pointCount":3,"ratio":"0.5","width":1000,"height":1000,"mainPoints":[{"x":100,"y":100},{"x":10,"y":900},{"x":950,"y":900}]},
     {"name":"job0","pointCount":4,"ratio":"0.4","width":250,"height":250,"mainPoints":[{"x":10,"y":10},{"x":10,"y":150},{"x":200,"y":10},{"x":200,"y":150}]}]
