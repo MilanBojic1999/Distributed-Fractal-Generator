@@ -29,6 +29,12 @@ func main() {
 	systemFile := flag.String("systemFile", "files"+*FILE_SEPARATOR+"system", "Path to file that describes system")
 	isBootstrap := flag.Bool("bootstrap", false, "Is node a bootstrap")
 
+	ipAddressFlag := flag.String("IpAddress", "", "dynamic ip address")
+	portFlag := flag.String("Port", "", "dynamic port")
+	bootstrapIpAddressFlag := flag.String("BootstrapIpAddress", "", "bootstrap ip address")
+	bootstrapPortFlag := flag.String("BootstrapPort", "", "bootstrap port")
+	listenCommandFlag := flag.Bool("Listener", false, "Node listen to CLI")
+
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
@@ -40,13 +46,43 @@ func main() {
 		check(err, "parseMapString")
 		return
 	}
+
 	json.Unmarshal(dat, &bootMap)
 
+	var ipAddress, bootstrapIpAddress string
+
+	var port, bootstrapPort int
+
+	if len(*ipAddressFlag) > 0 {
+		ipAddress = *ipAddressFlag
+	} else {
+		ipAddress = bootMap["ipAddress"].(string)
+	}
+
+	if len(*portFlag) > 0 {
+		port, _ = strconv.Atoi(*portFlag)
+	} else {
+		port = int(bootMap["port"].(float64))
+	}
+
 	fmt.Println(bootMap)
+	fmt.Println(ipAddress, bootstrapIpAddress, port, bootstrapPort)
 
 	if *isBootstrap {
-		bootstrap.RunBootstrap(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), *FILE_SEPARATOR)
+		bootstrap.RunBootstrap(ipAddress, port, *FILE_SEPARATOR, *listenCommandFlag)
 	} else {
+
+		if len(*bootstrapIpAddressFlag) > 0 {
+			bootstrapIpAddress = *bootstrapIpAddressFlag
+		} else {
+			bootstrapIpAddress = bootMap["bootstrapIpAddress"].(string)
+		}
+
+		if len(*bootstrapPortFlag) > 0 {
+			bootstrapPort, _ = strconv.Atoi(*bootstrapPortFlag)
+		} else {
+			bootstrapPort = int(bootMap["bootstrapPort"].(float64))
+		}
 
 		var JobList []job.Job
 		jobs_interface := bootMap["jobs"]
@@ -56,7 +92,7 @@ func main() {
 		// mapstructure.Decode(jobs_interface, JobList)
 
 		fmt.Printf("%T %v\n", jobs_interface, jobs_interface)
-		worker.RunWorker(bootMap["ipAddress"].(string), int(bootMap["port"].(float64)), bootMap["bootstrapIpAddress"].(string), int(bootMap["bootstrapPort"].(float64)), JobList, *FILE_SEPARATOR)
+		worker.RunWorker(ipAddress, port, bootstrapIpAddress, bootstrapPort, JobList, *FILE_SEPARATOR, *listenCommandFlag)
 	}
 }
 

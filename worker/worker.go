@@ -78,7 +78,10 @@ var JobStatusChannel chan job.JobStatus
 
 var ClusterGate chan int32
 
-func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string) {
+func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPort int, jobs []job.Job, FILE_SEPARATOR string, listenToCli bool) {
+
+	fmt.Println("STARTING NEW NODE")
+	fmt.Println("--------------------------------\n\n ")
 
 	LogFileChan = make(chan string, 15)
 	LogErrorChan = make(chan string, 15)
@@ -116,13 +119,17 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
-		check(err, "LogFile")
+		fmt.Printf(err.Error(), "LogFile")
+		return
 	}
 
 	ErrorFile, err := os.Create(fmt.Sprintf("files%serror%sworker(%s_%d).log", FILE_SEPARATOR, FILE_SEPARATOR, ipAddres, port))
 	if err != nil {
-		check(err, "LogFile")
+		fmt.Printf(err.Error(), "LogFile")
+		return
 	}
+
+	fmt.Println("FILES CREATED")
 
 	ImageInfoChannel = make(chan map[string]any, 100)
 	JobStatusChannel = make(chan job.JobStatus, 100)
@@ -158,13 +165,25 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 		makeInitConnections()
 	}
 
+	LogFileChan <- WorkerNode.String()
+
+	toSend := message.MakeEnteredMessage(*WorkerNode.GetNodeInfo())
+	go broadcastMessage(&WorkerNode, toSend)
+
+	toSendBootstrap := message.MakeJoinMessage(*WorkerNode.GetNodeInfo(), *BootstrapNode.GetNodeInfo())
+	go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSendBootstrap)
+
 	if len(WorkerNode.SystemInfo[0].JobName) > 0 {
 		contact := WorkerNode.SystemInfo[0]
 		toSend := message.MakeStoppedAskForJobMessage(*WorkerNode.GetNodeInfo(), contact)
 		sendMessage(WorkerNode.GetNodeInfo(), &contact, toSend)
 	}
 
-	listenCommand(CommandPortListenChan)
+	if listenToCli {
+		listenCommand(CommandPortListenChan)
+	} else {
+		<-CommandPortListenChan
+	}
 
 	fmt.Println("JOH")
 }
@@ -257,10 +276,14 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesStoppedJobInfo(msgStruct)
 		case message.UpdatedNode:
 			go proccessUpdatedNode(msgStruct)
+		case message.Purge:
+			go proccesPurgeResponse(msgStruct)
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
-			LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
+			if msgStruct.MessageType != message.UpdatedNode {
+				LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
+			}
 			return
 		}
 		broadcastnext := false
@@ -274,7 +297,6 @@ func processRecivedMessage(msgStruct message.Message) {
 		case message.Quit:
 			go proccesEnteredMessage(msgStruct)
 			broadcastnext = true
-
 		case message.UpdatedNode:
 			go proccessUpdatedNode(msgStruct)
 			broadcastnext = true
@@ -283,9 +305,10 @@ func processRecivedMessage(msgStruct message.Message) {
 			newMsg := msgStruct.MakeMeASender(&WorkerNode)
 			LogFileChan <- fmt.Sprintf("Recived but ain't for me: %s \\ Broadcasting", msgStruct.Log())
 			broadcastMessage(&WorkerNode, newMsg)
-		} else {
+		} else if msgStruct.GetReciver().Id >= 0 {
 			newMsg := msgStruct.MakeMeASender(&WorkerNode)
-			nextNode := findNextNode(newMsg.GetReciver())
+			nextNode := findNextNode(newMsg.GetReciver(), newMsg.GetRoute())
+			LogFileChan <- fmt.Sprintf("Recived but ain't for me: %s \\ Sanding to %d", msgStruct.Log(), nextNode.Id)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, newMsg)
 		}
 
@@ -344,11 +367,6 @@ func proccesWelcomeMessage(msgStruct message.Message) {
 
 	LogFileChan <- fmt.Sprintf("System info: %v", WorkerNode.SystemInfo)
 
-	toSend := message.MakeEnteredMessage(*WorkerNode.GetNodeInfo())
-	go broadcastMessage(&WorkerNode, toSend)
-
-	toSendBootstrap := message.MakeJoinMessage(*WorkerNode.GetNodeInfo(), *BootstrapNode.GetNodeInfo())
-	go sendMessage(WorkerNode.GetNodeInfo(), BootstrapNode.GetNodeInfo(), toSendBootstrap)
 	WorkerEnteredChannel <- 1
 }
 
@@ -487,7 +505,7 @@ func proccesJobStatusRequest(msgStruct message.Message) {
 	}
 
 	toSend := message.MakeJobStatusMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), jobStatus)
-	nextNode := findNextNode(msgStruct.GetSender())
+	nextNode := findNextNode(msgStruct.GetSender(), toSend.Route)
 
 	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 }
@@ -546,14 +564,14 @@ func proccesClusterWelcome(msgStruct message.Message) {
 		LogFileChan <- fmt.Sprintf("Cluster connection: %d", modulemath.EditDistance(fractalID, val.FractalId))
 		if modulemath.EditDistance(fractalID, val.FractalId) == 1 {
 			toSendic := message.MakeClusterConnectionRequestMessage(*WorkerNode.GetNodeInfo(), val)
-			nextNode := findNextNode(val)
+			nextNode := findNextNode(val, toSendic.Route)
 			go sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSendic)
 		}
 	}
 
 	for _, val := range WorkerNode.SystemInfo {
 		toSend := message.MakeEnteredClusterMessage(*WorkerNode.GetNodeInfo(), val, *WorkerNode.GetNodeInfo())
-		nextOne := findNextNode(val)
+		nextOne := findNextNode(val, toSend.Route)
 
 		sendMessage(WorkerNode.GetNodeInfo(), &nextOne, toSend)
 	}
@@ -580,10 +598,9 @@ func proccesStopShareJob(msgStruct message.Message) {
 		clusterMap = make(map[string]node.NodeInfo)
 		WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
 
-		updateNode()
-
 		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), "", []structures.Point{})
-		nextNode := findNextNode(msgStruct.OriginalSender)
+		nextNode := findNextNode(msgStruct.OriginalSender, msgStruct.Route)
+		LogFileChan <- fmt.Sprintf("Sending StopeedINfo to %d throus %d:  %s", toSend.GetReciver().Id, nextNode.Id, toSend.Log())
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 	} else {
 		JobProccesingPoisonChan <- 1
@@ -601,7 +618,7 @@ func proccesStopShareJob(msgStruct message.Message) {
 		LogFileChan <- "Im here buty why"
 
 		toSend := message.MakeStoppedJobInfoMessage(*WorkerNode.GetNodeInfo(), msgStruct.GetSender(), workingJob.Name, workingJob.Points)
-		nextNode := findNextNode(msgStruct.OriginalSender)
+		nextNode := findNextNode(msgStruct.OriginalSender, msgStruct.Route)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 
 		fmt.Printf("Ending dummy len:^ %d\n", len(allJobs[workingJob.Name].Points))
@@ -632,7 +649,9 @@ func ReorganizeSystem(intrusiveJob *job.Job) {
 		// }
 
 		toSend := message.MakeStopShareJobMessage(*WorkerNode.GetNodeInfo(), val, *intrusiveJob)
-		nextNode := findNextNode(val)
+		nextNode := findNextNode(val, toSend.Route)
+		LogFileChan <- fmt.Sprintf("<><>> Sending StopShare to %d throus %d:  %s", toSend.GetReciver().Id, nextNode.Id, toSend.Log())
+
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 
 		ImageInfoWaitingGroup.Add(1)
@@ -680,7 +699,7 @@ func ReorganizeSystem(intrusiveJob *job.Job) {
 		jobic := workingJobs[i]
 		LogFileChan <- "Sending job to start: " + jobic.Log()
 		msg := message.MakeStartJobGenesisMessage(*WorkerNode.GetNodeInfo(), reciver, jobic.Name)
-		nextNode := findNextNode(reciver)
+		nextNode := findNextNode(reciver, msg.Route)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 	}
 
@@ -699,7 +718,7 @@ func ReorganizeSystem(intrusiveJob *job.Job) {
 		LogFileChan <- fmt.Sprintf("%s to %s to cLust %d", &reciver, &contact, contactId)
 
 		msg := message.MakeApproachClusterMessage(*WorkerNode.GetNodeInfo(), reciver, contact)
-		nextNode := findNextNode(reciver)
+		nextNode := findNextNode(reciver, msg.Route)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 
 		// jobInd = (jobInd + 1) % noWorkingJobs
@@ -889,7 +908,7 @@ func proccesApproachCluster(msgStruct message.Message) {
 	json.Unmarshal([]byte(msgStruct.Message), &contact)
 
 	toSend := message.MakeClusterKnockMessage(*WorkerNode.GetNodeInfo(), contact)
-	nextNode := findNextNode(contact)
+	nextNode := findNextNode(contact, toSend.Route)
 
 	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 
@@ -909,7 +928,7 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 
 	}
 
-	nextNode := findNextNode(msgStruct.GetSender())
+	nextNode := findNextNode(msgStruct.GetSender(), msgStruct.Route)
 
 	sendMessage(WorkerNode.GetNodeInfo(), &nextNode, toSend)
 
@@ -943,6 +962,7 @@ func makeInitConnections() {
 	sendMessage(WorkerNode.GetNodeInfo(), &tmpNI, toSendPrev)
 
 	ConnectionWaitGroup.Wait()
+	LogFileChan <- "This is because"
 }
 
 func sendMessage(sender, reciver *node.NodeInfo, msg message.IMessage) bool {
@@ -950,7 +970,7 @@ func sendMessage(sender, reciver *node.NodeInfo, msg message.IMessage) bool {
 	if err != nil {
 		if _, ok := err.(net.Error); ok {
 			// fmt.Println("Error received while connecting to ", reciver.NodeId)
-			check(err, "sendMessage")
+			check(err, "sendMessage__"+reciver.GetFullAddress())
 			return false
 		}
 	} else {
@@ -963,9 +983,11 @@ func sendMessage(sender, reciver *node.NodeInfo, msg message.IMessage) bool {
 
 func broadcastMessage(sender *node.Worker, msg message.IMessage) bool {
 	result := true
+	LogFileChan <- fmt.Sprintf("Broadcasting to: %v", sender.SystemInfo)
 	for _, val := range sender.SystemInfo {
-		nextOne := findNextNode(val)
-		result = result && sendMessage(sender.GetNodeInfo(), &nextOne, msg)
+		nextOne := findNextNode(val, msg.GetRoute())
+		LogFileChan <- fmt.Sprintf("Broadcasting from %d to %d throu %d", sender.Id, val.Id, nextOne.Id)
+		result = sendMessage(sender.GetNodeInfo(), &nextOne, msg)
 	}
 
 	return result
@@ -1096,7 +1118,7 @@ func GetOneJobResult(name string) int {
 	for _, node := range WorkerNode.SystemInfo {
 		if strings.EqualFold(name, node.JobName) {
 			msg := message.MakeImageInfoRequestMessage(*WorkerNode.GetNodeInfo(), node)
-			nextNode := findNextNode(node)
+			nextNode := findNextNode(node, msg.Route)
 			ImageInfoWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 			nodeWaiting++
@@ -1113,7 +1135,7 @@ func GetOneNodeForJobResult(name, fractalID string) int {
 	for _, node := range WorkerNode.SystemInfo {
 		if strings.EqualFold(name, node.JobName) && strings.EqualFold(fractalID, node.FractalId) {
 			msg := message.MakeImageInfoRequestMessage(*WorkerNode.GetNodeInfo(), node)
-			nextNode := findNextNode(node)
+			nextNode := findNextNode(node, msg.Route)
 
 			ImageInfoWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
@@ -1189,7 +1211,7 @@ func parseListNodes() {
 func allJobsStatus() int {
 	for _, node := range WorkerNode.SystemInfo {
 		msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
-		nextNode := findNextNode(node)
+		nextNode := findNextNode(node, msg.Route)
 
 		JobStatusWaitingGroup.Add(1)
 		sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
@@ -1209,7 +1231,7 @@ func oneJobStatus(name string) int {
 	for _, node := range WorkerNode.SystemInfo {
 		if strings.EqualFold(name, node.JobName) {
 			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
-			nextNode := findNextNode(node)
+			nextNode := findNextNode(node, msg.Route)
 			JobStatusWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
 			nodeWaiting++
@@ -1226,7 +1248,7 @@ func oneNodeJobStatus(name, fractalID string) int {
 	for _, node := range WorkerNode.SystemInfo {
 		if strings.EqualFold(name, node.JobName) && strings.EqualFold(fractalID, node.FractalId) {
 			msg := message.MakeJobStatusRequestMessage(*WorkerNode.GetNodeInfo(), node)
-			nextNode := findNextNode(node)
+			nextNode := findNextNode(node, msg.Route)
 
 			JobStatusWaitingGroup.Add(1)
 			sendMessage(WorkerNode.GetNodeInfo(), &nextNode, msg)
@@ -1366,7 +1388,7 @@ func listenCommand(listenChan chan int32) {
 	}
 }
 
-func findNextNode(goal node.NodeInfo) node.NodeInfo {
+func findNextNode(goal node.NodeInfo, route []int) node.NodeInfo {
 
 	if WorkerNode.Id == goal.Id || WorkerNode.Prev == goal.Id || WorkerNode.Next == goal.Id {
 		return goal
@@ -1377,50 +1399,56 @@ func findNextNode(goal node.NodeInfo) node.NodeInfo {
 	}
 
 	var v, u, nextNode node.NodeInfo
+	var candInd1, candInd2 int
 	if WorkerNode.Id > goal.Id {
 		v, u = *WorkerNode.GetNodeInfo(), goal
+		candInd1, candInd2 = WorkerNode.Next, WorkerNode.Prev
 	} else {
 		v, u = goal, *WorkerNode.GetNodeInfo()
+		candInd1, candInd2 = WorkerNode.Prev, WorkerNode.Next
+
 	}
 
 	dist1 := v.Id - u.Id
-	dist2 := len(WorkerNode.SystemInfo) - u.Id + v.Id
+	dist2 := len(WorkerNode.SystemInfo) - dist1
 	var minDist int
 	if dist1 > dist2 {
-		nextNode = WorkerNode.SystemInfo[WorkerNode.Prev]
+		nextNode = WorkerNode.SystemInfo[candInd1]
 		minDist = dist2
 	} else {
-		nextNode = WorkerNode.SystemInfo[WorkerNode.Next]
+		nextNode = WorkerNode.SystemInfo[candInd2]
 		minDist = dist1
 	}
+
+	LogFileChan <- fmt.Sprintf("to NODE %d next node is %d (NEXT: %d(%d) vs. PREV: %d(%d))", goal.Id, nextNode.Id, candInd1, dist1, candInd2, dist2)
+
 	if len(WorkerNode.FractalId) == 0 || len(goal.FractalId) == 0 {
 		return nextNode
 	}
-	if len(goal.FractalId) > 0 {
 
-		editDist := modulemath.EditDistance(WorkerNode.FractalId, goal.FractalId)
+	editDist := modulemath.EditDistance(WorkerNode.FractalId, goal.FractalId)
 
-		if minDist > editDist {
-			myArr := []rune(WorkerNode.FractalId)
-			goalArr := []rune(goal.FractalId)
+	if minDist > editDist {
+		myArr := []rune(WorkerNode.FractalId)
+		goalArr := []rune(goal.FractalId)
 
-			sze := len(myArr)
-			if sze > len(goalArr) {
-				sze = len(goalArr)
-			}
-			fmt.Printf("sze::: %d ¤¤ %v ¤¤ %v\n", sze, string(myArr), string(goalArr))
+		sze := len(myArr)
+		if sze > len(goalArr) {
+			sze = len(goalArr)
+		}
+		fmt.Printf("sze::: %d ¤¤ %v ¤¤ %v\n", sze, string(myArr), string(goalArr))
 
-			for i := 0; i < sze; i++ {
-				tmpArr := make([]rune, sze)
-				copy(tmpArr, myArr)
-				fmt.Println("tmparr: ", tmpArr, myArr)
-				tmpArr[i] = goalArr[i]
-				if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
-					nextNode = v
-					break
-				}
+		for i := 0; i < sze; i++ {
+			tmpArr := make([]rune, sze)
+			copy(tmpArr, myArr)
+			fmt.Println("tmparr: ", tmpArr, myArr)
+			tmpArr[i] = goalArr[i]
+			if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
+				nextNode = v
+				break
 			}
 		}
 	}
+
 	return nextNode
 }

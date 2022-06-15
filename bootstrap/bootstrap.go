@@ -33,7 +33,7 @@ var BootstrapTableMutex sync.Mutex
 var ListenPortListenChan chan int32
 var CommandPortListenChan chan int32
 
-func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
+func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string, listenToCli bool) {
 
 	BootstrapNode = node.Bootstrap{IpAddress: ipAddres, Port: port, Workers: make([]node.NodeInfo, 0, 10)}
 
@@ -42,12 +42,14 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
 	LogFile, err := os.Create(fmt.Sprintf("files%soutput%sbootstrapLog.log", FILE_SEPARATOR, FILE_SEPARATOR))
 	if err != nil {
-		check(err, "LogFile")
+		fmt.Printf(err.Error(), "LogFile")
+		return
 	}
 
 	ErrorFile, err := os.Create(fmt.Sprintf("files%serror%sbootstrapError.log", FILE_SEPARATOR, FILE_SEPARATOR))
 	if err != nil {
-		check(err, "LogFile")
+		fmt.Printf(err.Error(), "LogFile")
+		return
 	}
 
 	LogFileChan = make(chan string, 15)
@@ -66,7 +68,11 @@ func RunBootstrap(ipAddres string, port int, FILE_SEPARATOR string) {
 
 	go listenOnPort(ListenPortListenChan)
 
-	listenCommand(CommandPortListenChan)
+	if listenToCli {
+		listenCommand(CommandPortListenChan)
+	} else {
+		<-CommandPortListenChan
+	}
 }
 
 func listenOnPort(listenChan chan int32) {
@@ -217,6 +223,7 @@ func listenCommand(listenChan chan int32) {
 
 	input := make(chan string)
 	wainchanel := make(chan string)
+	time.Sleep(time.Microsecond * 200)
 	go func(in, waitchan chan string) {
 		// create new reader from stdin
 		reader := bufio.NewReader(os.Stdin)
