@@ -54,11 +54,11 @@ type JobStatus struct {
 	Name            string         `json:"name"`
 	PointsGenerated int            `json:"pointsGenerated"`
 	WorkingNodes    int            `json:"workingNodes"`
-	PointsPerNodes  map[string]int `json:"pointNodes"`
+	PointsPerNodes  map[string]int `json:"pointsPerNodes"`
 }
 
 func (js *JobStatus) Log() string {
-	return fmt.Sprintf("Job Status %s, with %d gen points and %d working nodes", js.Name, js.PointsGenerated, js.WorkingNodes)
+	return fmt.Sprintf("Job Status %s, with %d gen points and %d working nodes <> %v", js.Name, js.PointsGenerated, js.WorkingNodes, js.PointsPerNodes)
 }
 
 func (j *Job) GetJobStatus(fractalID string) *JobStatus {

@@ -195,6 +195,10 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 				minJob = key
 				minJobNum = val
 			}
+			if job, ok := allJobs[key]; ok {
+				job.Working = true
+				allJobs[key] = job
+			}
 		}
 
 		if len(minJob) == 0 {
@@ -258,7 +262,11 @@ func listenOnPort(listenChan chan int32) {
 
 func processRecivedMessage(msgStruct message.Message) {
 	if msgStruct.GetReciver().Id == WorkerNode.GetId() {
-		LogFileChan <- "Finally Recived " + msgStruct.Log()
+		if msgStruct.MessageType != message.StoppedJobInfo && msgStruct.MessageType != message.ImageInfo {
+			LogFileChan <- "Finally Recived " + msgStruct.Log()
+		} else {
+			LogFileChan <- "Finally Recived " + msgStruct.String()
+		}
 
 		switch msgStruct.MessageType {
 		case message.Contact:
@@ -345,7 +353,7 @@ func proccesContactMessage(msgStruct message.Message) {
 
 	var ContactInfo node.NodeInfo
 
-	json.Unmarshal([]byte(msgStruct.GetMessage()), &ContactInfo)
+	mapstructure.Decode(msgStruct.Message, &ContactInfo)
 
 	if ContactInfo.Id == -1 {
 		WorkerNode.Id = 0
@@ -363,9 +371,13 @@ func proccesContactMessage(msgStruct message.Message) {
 
 func proccesWelcomeMessage(msgStruct message.Message) {
 
-	var msgMap map[string]interface{}
+	msgMap := make(map[string]interface{})
 
-	json.Unmarshal([]byte(msgStruct.GetMessage()), &msgMap)
+	// json.Unmarshal([]byte(msgStruct.GetMessage()), &msgMap)
+
+	// msgMap = msgStruct.Message.(map[string]interface{})
+
+	mapstructure.Decode(msgStruct.Message, &msgMap)
 
 	newNodeId, ok := msgMap["id"].(float64)
 	if !ok {
@@ -407,7 +419,9 @@ func updateNode() {
 func proccessUpdatedNode(msgStruct message.Message) {
 
 	var tmpNode node.NodeInfo
-	json.Unmarshal([]byte(msgStruct.Message), &tmpNode)
+	// json.Unmarshal([]byte(msgStruct.Message), &tmpNode)
+
+	mapstructure.Decode(msgStruct.Message, &tmpNode)
 
 	if _, ok := WorkerNode.SystemInfo[tmpNode.Id]; !ok {
 		LogErrorChan <- "Updating non existing node" + tmpNode.String()
@@ -459,7 +473,8 @@ func proccesSystemKnockMessage(msgStruct message.Message) {
 func proccesEnteredMessage(msgStruct message.Message) {
 
 	var newNodeInfo node.NodeInfo
-	json.Unmarshal([]byte(msgStruct.Message), &newNodeInfo)
+
+	mapstructure.Decode(msgStruct.Message, &newNodeInfo)
 
 	if val, ok := WorkerNode.SystemInfo[newNodeInfo.Id]; ok {
 		LogErrorChan <- fmt.Sprintf("Tried to info system %v , but already have %v", newNodeInfo, val)
@@ -472,7 +487,7 @@ func proccesEnteredMessage(msgStruct message.Message) {
 
 func proccesConnectionRequest(msgStruct message.Message) {
 
-	direction := msgStruct.GetMessage()
+	direction := msgStruct.GetMessage().(string)
 
 	if strings.Compare(direction, string(message.Next)) == 0 {
 		WorkerNode.Prev = msgStruct.OriginalSender.Id
@@ -486,10 +501,14 @@ func proccesConnectionRequest(msgStruct message.Message) {
 
 func proccesConnectionResponse(msgStruct message.Message) {
 
-	message_arr := strings.Split(msgStruct.GetMessage(), ":")
+	tmpMap := make(map[string]interface{})
 
-	accepted, _ := strconv.ParseBool(message_arr[0])
-	direction := message_arr[1]
+	// tmpMap = msgStruct.Message.(map[string]interface{})
+
+	mapstructure.Decode(msgStruct.GetMessage(), &tmpMap)
+
+	accepted, _ := tmpMap["accepted"].(bool)
+	direction := tmpMap["smer"].(string)
 
 	if accepted {
 		if strings.Compare(direction, string(message.Next)) == 0 {
@@ -510,10 +529,19 @@ func proccesPurgeResponse(msgStruct message.Message) {
 
 func proccesJobStatus(msgStruct message.Message) {
 
-	var newJobStatus job.JobStatus
-	json.Unmarshal([]byte(msgStruct.GetMessage()), &newJobStatus)
+	newJobStatus := new(job.JobStatus)
 
-	JobStatusChannel <- newJobStatus
+	// newJobStatus = msgStruct.Message.(job.JobStatus)
+
+	tmpMap := make(map[string]interface{})
+
+	mapstructure.Decode(msgStruct.Message, &newJobStatus)
+	mapstructure.Decode(msgStruct.Message, &tmpMap)
+
+	LogFileChan <- newJobStatus.Log()
+	LogFileChan <- fmt.Sprintf("%v %v", tmpMap, tmpMap["pointNodes"])
+
+	JobStatusChannel <- *newJobStatus
 	JobStatusWaitingGroup.Done()
 }
 
@@ -565,8 +593,11 @@ func proccesClusterKnock(msgStruct message.Message) {
 
 func proccesClusterWelcome(msgStruct message.Message) {
 
-	var input map[string]string
-	json.Unmarshal([]byte(msgStruct.Message), &input)
+	input := make(map[string]string)
+
+	// input = msgStruct.Message.(map[string]string)
+
+	mapstructure.Decode(msgStruct.Message, &input)
 
 	fractalID := input["fractalID"]
 	jobName := input["jobName"]
@@ -608,10 +639,13 @@ func proccesClusterWelcome(msgStruct message.Message) {
 func proccesStopShareJob(msgStruct message.Message) {
 
 	var jobInput job.Job
-	json.Unmarshal([]byte(msgStruct.Message), &jobInput)
+
+	// jobInput = msgStruct.Message.(job.Job)
+
+	mapstructure.Decode(msgStruct.Message, &jobInput)
 
 	if _, ok := allJobs[jobInput.Name]; !ok {
-		LogFileChan <- "New Job is adding: " + jobInput.Log() + " :::: " + msgStruct.Message
+		LogFileChan <- "New Job is adding: " + jobInput.Log() + " :::: "
 		allJobs[jobInput.Name] = &jobInput
 	}
 
@@ -660,8 +694,17 @@ func proccesStopShareJob(msgStruct message.Message) {
 
 func proccesStoppedJobInfo(msgStruct message.Message) {
 
-	var tmpJob map[string]any
-	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+	tmpJob := make(map[string]any)
+
+	// tmpJob = msgStruct.Message.(map[string]any)
+
+	mapstructure.Decode(msgStruct.Message, &tmpJob)
+
+	tmpNode := WorkerNode.SystemInfo[msgStruct.GetSender().Id]
+	tmpNode.FractalId = ""
+	tmpNode.JobName = ""
+
+	WorkerNode.SystemInfo[tmpNode.Id] = tmpNode
 
 	ImageInfoChannel <- tmpJob
 
@@ -799,7 +842,8 @@ func splitWorkingJob() {
 func proccesEnteredCluster(msgStruct message.Message) {
 
 	var nodeInput node.NodeInfo
-	json.Unmarshal([]byte(msgStruct.Message), &nodeInput)
+
+	mapstructure.Decode(msgStruct.Message, &nodeInput)
 
 	if _, ok := clusterMap[nodeInput.FractalId]; ok {
 		LogErrorChan <- fmt.Sprintf("Node with the same fractalId %s>> %s in Cluster  %v", nodeInput.FractalId, nodeInput.String(), clusterMap)
@@ -866,7 +910,7 @@ func proccesClusterConnectionRequest(msgStruct message.Message) {
 
 func proccesClusterConnectionResponse(msgStruct message.Message) {
 
-	accept, _ := strconv.ParseBool(msgStruct.GetMessage())
+	accept, _ := msgStruct.Message.(bool)
 	sender := msgStruct.GetSender()
 
 	if !accept {
@@ -880,7 +924,7 @@ func proccesClusterConnectionResponse(msgStruct message.Message) {
 
 func proccesStartJobGenesis(msgStruct message.Message) {
 
-	jobName := msgStruct.Message
+	jobName := msgStruct.Message.(string)
 
 	if _, ok := allJobs[jobName]; !ok {
 		LogErrorChan <- fmt.Sprintf("Job %s doenst exist...", jobName)
@@ -933,7 +977,8 @@ func proccesStartJob(msgStruct message.Message) {
 func proccesApproachCluster(msgStruct message.Message) {
 
 	var contact node.NodeInfo
-	json.Unmarshal([]byte(msgStruct.Message), &contact)
+
+	mapstructure.Decode(msgStruct.Message, &contact)
 
 	toSend := message.MakeClusterKnockMessage(*WorkerNode.GetNodeInfo(), contact)
 	nextNode := findNextNode(contact, toSend.Route)
@@ -964,8 +1009,11 @@ func proccesImageInfoRequest(msgStruct message.Message) {
 
 func proccesImageInfoResponse(msgStruct message.Message) {
 
-	var tmpJob map[string]any
-	json.Unmarshal([]byte(msgStruct.Message), &tmpJob)
+	tmpJob := make(map[string]any)
+
+	// tmpJob = msgStruct.Message.(map[string]any)
+
+	mapstructure.Decode(msgStruct.Message, &tmpJob)
 
 	ImageInfoChannel <- tmpJob
 	ImageInfoWaitingGroup.Done()
@@ -1362,7 +1410,9 @@ func parseCommand(commandArg string) bool {
 	} else if strings.EqualFold(command, "start") {
 		parseStartJob(command_arr[1])
 	} else if strings.EqualFold(command, "result") {
-		parseResultJob(command_arr[1])
+		if len(command_arr) > 1 {
+			parseResultJob(command_arr[1])
+		}
 	} else if strings.EqualFold(command, "stop") {
 		parseStopJob(command_arr[1])
 	} else if strings.EqualFold(command, "status") {

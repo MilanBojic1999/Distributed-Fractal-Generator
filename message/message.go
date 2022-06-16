@@ -4,21 +4,20 @@ import (
 	"distributed/job"
 	"distributed/node"
 	"distributed/structures"
-	"encoding/json"
 	"fmt"
 	"sync/atomic"
 )
 
-func firstN(s string, n int) string {
-	i := 0
-	for j := range s {
-		if i == n {
-			return s[:j]
-		}
-		i++
-	}
-	return s
-}
+// func firstN(s string, n int) string {
+// 	i := 0
+// 	for j := range s {
+// 		if i == n {
+// 			return s[:j]
+// 		}
+// 		i++
+// 	}
+// 	return s
+// }
 
 type MessageType string
 
@@ -80,7 +79,7 @@ type IMessage interface {
 	GetSender() node.NodeInfo
 	GetReciver() node.NodeInfo
 	GetRoute() []int
-	GetMessage() string
+	GetMessage() any
 }
 
 type Message struct {
@@ -88,12 +87,12 @@ type Message struct {
 	OriginalSender node.NodeInfo `json:"sender"`
 	Reciver        node.NodeInfo `json:"reciver"`
 	Route          []int         `json:"route"`
-	Message        string        `json:"Message"`
+	Message        any           `json:"Message"`
 	Id             int64         `json:"id"`
 }
 
 func (msg *Message) String() string {
-	return "Message"
+	return fmt.Sprintf("%d¦%d¦%d¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType)
 }
 
 func (msg *Message) Effect(args interface{}) {
@@ -111,12 +110,12 @@ func (msg *Message) GetRoute() []int {
 	return msg.Route
 }
 
-func (msg *Message) GetMessage() string {
+func (msg *Message) GetMessage() any {
 	return msg.Message
 }
 
 func (msg *Message) Log() string {
-	return fmt.Sprintf("%d¦%d¦%d¦%s¦%s", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, firstN(msg.Message, 500))
+	return fmt.Sprintf("%d¦%d¦%d¦%s¦%v", msg.OriginalSender.Id, msg.Reciver.Id, msg.Id, msg.MessageType, msg.Message)
 }
 
 func (msg *Message) MakeMeASender(node node.INode) IMessage {
@@ -135,7 +134,7 @@ func (msg *Message) MakeMeASender(node node.INode) IMessage {
 
 }
 
-func MakeInfoMessage(sender, reciver node.INode, message string) *Message {
+func MakeInfoMessage(sender, reciver node.INode, message any) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -150,7 +149,7 @@ func MakeInfoMessage(sender, reciver node.INode, message string) *Message {
 	return &msgReturn
 }
 
-func MakeInfoBroadcastMessage(sender node.INode, message string) *Message {
+func MakeInfoBroadcastMessage(sender node.INode, message any) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
@@ -184,8 +183,8 @@ func MakeContactMessage(sender node.NodeInfo, reciver, contact node.NodeInfo) *M
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	contact_byte, _ := json.Marshal(contact)
-	msgReturn.Message = string(contact_byte)
+
+	msgReturn.Message = contact
 	msgReturn.MessageType = Contact
 
 	msgReturn.OriginalSender = sender
@@ -202,8 +201,8 @@ func MakeWelcomeMessage(sender, reciver node.NodeInfo, nodeId int, systemInfo ma
 	msgReturn.Id = int64(MainCounter.Inc())
 
 	msgMap := map[string]interface{}{"id": nodeId, "systemInfo": systemInfo}
-	msgb, _ := json.Marshal(msgMap)
-	msgReturn.Message = string(msgb)
+
+	msgReturn.Message = msgMap
 	msgReturn.MessageType = Welcome
 
 	msgReturn.OriginalSender = sender
@@ -233,7 +232,7 @@ func MakeJoinMessage(sender, reciver node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = fmt.Sprint(sender.Id)
+	msgReturn.Message = sender.Id
 	msgReturn.MessageType = Join
 
 	msgReturn.OriginalSender = sender
@@ -248,7 +247,7 @@ func MakeLeaveMessage(sender, reciver node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = fmt.Sprint(sender.Id)
+	msgReturn.Message = sender.Id
 	msgReturn.MessageType = Leave
 
 	msgReturn.OriginalSender = sender
@@ -263,10 +262,7 @@ func MakeEnteredMessage(sender node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-
-	msgjson, _ := json.Marshal(sender)
-
-	msgReturn.Message = string(msgjson)
+	msgReturn.Message = sender
 	msgReturn.MessageType = Entered
 
 	msgReturn.OriginalSender = sender
@@ -290,7 +286,7 @@ func MakeConnectionRequestMessage(sender, reciver node.NodeInfo, smer Connection
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = string(smer)
+	msgReturn.Message = smer
 	msgReturn.MessageType = ConnectionRequest
 
 	msgReturn.OriginalSender = sender
@@ -305,7 +301,10 @@ func MakeConnectionResponseMessage(sender, reciver node.NodeInfo, accepted bool,
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = fmt.Sprintf("%t:%v", accepted, smer)
+
+	var tmpMap = map[string]any{"accepted": accepted, "smer": smer}
+
+	msgReturn.Message = tmpMap
 	msgReturn.MessageType = ConnectionResponse
 
 	msgReturn.OriginalSender = sender
@@ -320,7 +319,7 @@ func MakeQuitMessage(sender node.NodeInfo) *Message {
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = fmt.Sprint(sender.Id)
+	msgReturn.Message = sender.Id
 	msgReturn.MessageType = Quit
 
 	msgReturn.OriginalSender = sender
@@ -353,9 +352,7 @@ func MakeEnteredClusterMessage(sender, reciver, node node.NodeInfo) *Message {
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	msgjson, _ := json.Marshal(node)
-
-	msgReturn.Message = string(msgjson)
+	msgReturn.Message = node
 	msgReturn.MessageType = EnteredCluster
 
 	msgReturn.OriginalSender = sender
@@ -384,7 +381,7 @@ func MakeClusterConnectionResponseMessage(sender, reciver node.NodeInfo, accepte
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	msgReturn.Message = fmt.Sprint(accepted)
+	msgReturn.Message = accepted
 	msgReturn.MessageType = ClusterConnectionResponse
 
 	msgReturn.OriginalSender = sender
@@ -417,8 +414,7 @@ func MakeImageInfoMessage(sender, reciver node.NodeInfo, jobName string, points 
 
 	outMap := map[string]interface{}{"jobName": jobName, "points": points}
 
-	points_json, _ := json.Marshal(outMap)
-	msgReturn.Message = string(points_json)
+	msgReturn.Message = outMap
 	msgReturn.MessageType = ImageInfo
 
 	msgReturn.OriginalSender = sender
@@ -479,8 +475,8 @@ func MakeApproachClusterMessage(sender, reciver, contact node.NodeInfo) *Message
 	msgReturn := Message{}
 
 	msgReturn.Id = int64(MainCounter.Inc())
-	jsonstr, _ := json.Marshal(contact)
-	msgReturn.Message = string(jsonstr)
+
+	msgReturn.Message = contact
 	msgReturn.MessageType = ApproachCluster
 
 	msgReturn.OriginalSender = sender
@@ -498,9 +494,7 @@ func MakeClusterWelcomeMessage(sender, reciver node.NodeInfo, fractalID, jobName
 
 	sentMap := map[string]string{"fractalID": fractalID, "jobName": jobName}
 
-	jsonstr, _ := json.Marshal(sentMap)
-
-	msgReturn.Message = string(jsonstr)
+	msgReturn.Message = sentMap
 	msgReturn.MessageType = ClusterWelcome
 
 	msgReturn.OriginalSender = sender
@@ -516,9 +510,7 @@ func MakeStopShareJobMessage(sender, reciver node.NodeInfo, jobINput job.Job) *M
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	points_json, _ := json.Marshal(jobINput)
-
-	msgReturn.Message = string(points_json)
+	msgReturn.Message = jobINput
 	msgReturn.MessageType = StopShareJob
 
 	msgReturn.OriginalSender = sender
@@ -536,9 +528,7 @@ func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobName string, po
 
 	outMap := map[string]interface{}{"jobName": jobName, "points": points}
 
-	points_json, _ := json.Marshal(outMap)
-
-	msgReturn.Message = string(points_json)
+	msgReturn.Message = outMap
 
 	msgReturn.MessageType = StoppedJobInfo
 
@@ -572,9 +562,7 @@ func MakeJobStatusMessage(sender, reciver node.NodeInfo, jobStatus job.JobStatus
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	jsonstr, _ := json.Marshal(jobStatus)
-
-	msgReturn.Message = string(jsonstr)
+	msgReturn.Message = jobStatus
 
 	msgReturn.MessageType = JobStatus
 
@@ -591,9 +579,7 @@ func MakeUpdatedNodeMessage(sender, nodeInput node.NodeInfo) *Message {
 
 	msgReturn.Id = int64(MainCounter.Inc())
 
-	jsonstr, _ := json.Marshal(nodeInput)
-
-	msgReturn.Message = string(jsonstr)
+	msgReturn.Message = nodeInput
 
 	msgReturn.MessageType = UpdatedNode
 
