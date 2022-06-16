@@ -25,6 +25,9 @@ func (mm *ModMath) SetN(n int32) {
 }
 
 func (mm *ModMath) IntToMod(input int32) string {
+	if input == 0 {
+		return "0"
+	}
 	var sb strings.Builder
 	for ; input > 0; input /= mm.N {
 		sb.WriteString(strconv.Itoa(int(input % mm.N)))
@@ -50,12 +53,15 @@ func (mm *ModMath) NextOne(input string) string {
 	}
 	if overflow {
 		if outArray[0] == '0' {
-			outArray = append([]rune{'1'}, outArray...)
+			outArray = append([]rune{'0'}, outArray...)
+			outArray[len(outArray)-1] = '1'
 		}
 	} else if i >= 0 {
 		outArray = append(array[:i+1], outArray...)
 	}
-
+	if outArray[len(outArray)-1] == '0' {
+		outArray[len(outArray)-1] = '1'
+	}
 	return string(outArray)
 }
 
@@ -70,6 +76,13 @@ func (mm *ModMath) ModToInt(input string) int {
 }
 
 func (mm *ModMath) CompareTwoNumbs(num1, num2 string) int {
+	if len(num1) > len(num2) {
+		return 1
+	}
+	if len(num1) < len(num2) {
+		return -1
+	}
+
 	return mm.ModToInt(num1) - mm.ModToInt(num2)
 }
 
