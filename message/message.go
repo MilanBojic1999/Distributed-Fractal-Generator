@@ -550,23 +550,6 @@ func MakeStoppedJobInfoMessage(sender, reciver node.NodeInfo, jobName string, po
 	return &msgReturn
 }
 
-func MakeStoppedAskForJobMessage(sender, reciver node.NodeInfo) *Message {
-	msgReturn := Message{}
-
-	msgReturn.Id = int64(MainCounter.Inc())
-
-	msgReturn.Message = "AskForJob"
-
-	msgReturn.MessageType = AskForJob
-
-	msgReturn.OriginalSender = sender
-	msgReturn.Reciver = reciver
-
-	msgReturn.Route = []int{sender.Id}
-
-	return &msgReturn
-}
-
 func MakeJobStatusRequestMessage(sender, reciver node.NodeInfo) *Message {
 	msgReturn := Message{}
 

@@ -175,7 +175,34 @@ func RunWorker(ipAddres string, port int, bootstrapIpAddres string, bootstrapPor
 
 	if len(WorkerNode.SystemInfo[0].JobName) > 0 {
 		contact := WorkerNode.SystemInfo[0]
-		toSend := message.MakeStoppedAskForJobMessage(*WorkerNode.GetNodeInfo(), contact)
+		LogFileChan <- fmt.Sprintf("Newest in system asking %v for job", contact.String())
+
+		workingJobMap := make(map[string]node.NodeInfo)
+		workingJobWorkingNode := make(map[string]int)
+		for _, nn := range WorkerNode.SystemInfo {
+			if len(nn.JobName) == 0 {
+				LogErrorChan <- "JOb not wokring in working system" + nn.String()
+				continue
+			}
+			workingJobMap[nn.JobName] = nn
+			workingJobWorkingNode[nn.JobName] += 1
+		}
+
+		minJobNum := 1000
+		minJob := ""
+		for key, val := range workingJobWorkingNode {
+			if val < minJobNum {
+				minJob = key
+				minJobNum = val
+			}
+		}
+
+		if len(minJob) == 0 {
+			LogErrorChan <- "Null JOb"
+		}
+
+		contact = workingJobMap[minJob]
+		toSend := message.MakeClusterKnockMessage(*WorkerNode.GetNodeInfo(), contact)
 		sendMessage(WorkerNode.GetNodeInfo(), &contact, toSend)
 	}
 
@@ -276,14 +303,13 @@ func processRecivedMessage(msgStruct message.Message) {
 			go proccesStoppedJobInfo(msgStruct)
 		case message.UpdatedNode:
 			go proccessUpdatedNode(msgStruct)
-		case message.Purge:
-			go proccesPurgeResponse(msgStruct)
+
 		}
 	} else {
 		if partOfSlice(msgStruct.Route, WorkerNode.Id) {
-			if msgStruct.MessageType != message.UpdatedNode {
-				LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v", msgStruct.Log(), msgStruct.Route)
-			}
+			// if msgStruct.MessageType != message.UpdatedNode {
+			LogFileChan <- fmt.Sprintf("Recived Again not Rebroadcasting %s  ~~~ ROUTE: %v I'm %d", msgStruct.Log(), msgStruct.Route, WorkerNode.Id)
+			// }
 			return
 		}
 		broadcastnext := false
@@ -784,7 +810,7 @@ func proccesEnteredCluster(msgStruct message.Message) {
 
 		clusterMap[nodeInput.FractalId] = nodeInput
 
-		if strings.HasPrefix(nodeInput.FractalId, WorkerNode.FractalId) {
+		if strings.Compare(nodeInput.FractalId[:len(nodeInput.FractalId)-1], WorkerNode.FractalId) == 0 {
 			LogFileChan <- fmt.Sprintf("Node %v is waiting,(1)", nodeInput.String())
 			childrenWaiting++
 			waitingChildrenArray = append(waitingChildrenArray, nodeInput)
@@ -793,6 +819,8 @@ func proccesEnteredCluster(msgStruct message.Message) {
 				waitingChildrenArray = make([]node.NodeInfo, 0)
 				childrenWaiting = 0
 				WorkerNode.FractalId = WorkerNode.FractalId + "0"
+				WorkerNode.SystemInfo[WorkerNode.Id] = *WorkerNode.GetNodeInfo()
+
 				updateNode()
 			}
 		} else if len(nodeInput.FractalId) == 1 && len(WorkerNode.FractalId) == 1 {
@@ -984,10 +1012,15 @@ func sendMessage(sender, reciver *node.NodeInfo, msg message.IMessage) bool {
 func broadcastMessage(sender *node.Worker, msg message.IMessage) bool {
 	result := true
 	LogFileChan <- fmt.Sprintf("Broadcasting to: %v", sender.SystemInfo)
-	for _, val := range sender.SystemInfo {
-		nextOne := findNextNode(val, msg.GetRoute())
-		LogFileChan <- fmt.Sprintf("Broadcasting from %d to %d throu %d", sender.Id, val.Id, nextOne.Id)
-		result = sendMessage(sender.GetNodeInfo(), &nextOne, msg)
+
+	reciver := sender.SystemInfo[sender.Next]
+	sendMessage(sender.GetNodeInfo(), &reciver, msg)
+
+	reciver = sender.SystemInfo[sender.Prev]
+	sendMessage(sender.GetNodeInfo(), &reciver, msg)
+	for _, val := range sender.Connections {
+		LogFileChan <- fmt.Sprintf("Broadcasting from %d to %d throu %d", sender.Id, val.Id, val.Id)
+		result = sendMessage(sender.GetNodeInfo(), &val, msg)
 	}
 
 	return result
@@ -1400,23 +1433,21 @@ func findNextNode(goal node.NodeInfo, route []int) node.NodeInfo {
 
 	var v, u, nextNode node.NodeInfo
 	var candInd1, candInd2 int
-	if WorkerNode.Id > goal.Id {
-		v, u = *WorkerNode.GetNodeInfo(), goal
+	v, u = *WorkerNode.GetNodeInfo(), goal
+	candInd1, candInd2 = WorkerNode.Prev, WorkerNode.Next
+
+	dist1 := (v.Id - u.Id)
+	if dist1 < 0 {
+		dist1 = structures.AbsoluteInt(dist1)
 		candInd1, candInd2 = WorkerNode.Next, WorkerNode.Prev
-	} else {
-		v, u = goal, *WorkerNode.GetNodeInfo()
-		candInd1, candInd2 = WorkerNode.Prev, WorkerNode.Next
-
 	}
-
-	dist1 := v.Id - u.Id
 	dist2 := len(WorkerNode.SystemInfo) - dist1
 	var minDist int
 	if dist1 > dist2 {
-		nextNode = WorkerNode.SystemInfo[candInd1]
+		nextNode = WorkerNode.SystemInfo[candInd2]
 		minDist = dist2
 	} else {
-		nextNode = WorkerNode.SystemInfo[candInd2]
+		nextNode = WorkerNode.SystemInfo[candInd1]
 		minDist = dist1
 	}
 
@@ -1436,12 +1467,12 @@ func findNextNode(goal node.NodeInfo, route []int) node.NodeInfo {
 		if sze > len(goalArr) {
 			sze = len(goalArr)
 		}
-		fmt.Printf("sze::: %d ¤¤ %v ¤¤ %v\n", sze, string(myArr), string(goalArr))
+		// fmt.Printf("sze::: %d ¤¤ %v ¤¤ %v\n", sze, string(myArr), string(goalArr))
 
 		for i := 0; i < sze; i++ {
 			tmpArr := make([]rune, sze)
 			copy(tmpArr, myArr)
-			fmt.Println("tmparr: ", tmpArr, myArr)
+			// fmt.Println("tmparr: ", tmpArr, myArr)
 			tmpArr[i] = goalArr[i]
 			if v, ok := WorkerNode.Connections[string(tmpArr)]; ok {
 				nextNode = v

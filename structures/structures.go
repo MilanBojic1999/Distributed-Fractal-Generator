@@ -67,3 +67,11 @@ func (f MyFloat) AsFloat() float64 {
 	}
 	return float64(ref.Float())
 }
+
+func AbsoluteInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+
+	return v
+}

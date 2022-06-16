@@ -148,6 +148,7 @@ func proccesHailMessage(msg message.Message) {
 
 func proccesJoinMessage(msg message.Message) {
 	BootstrapNode.Workers = append(BootstrapNode.Workers, msg.OriginalSender)
+	fmt.Println(msg.GetSender())
 	EnterenceChannel <- 1 // izlazimo iz kriticne sekcije
 }
 
