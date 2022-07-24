@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-LOCAL_ADDRESS="172.24.53.39"
+LOCAL_ADDRESS="127.0.0.1"
 BASE_PORT=9300
 
 maxim=5

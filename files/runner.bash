@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOCAL_ADDRESS="172.24.53.39"
+LOCAL_ADDRESS="127.0.0.1"
 BASE_PORT=6300
 
 go run main.go --bootstrap --fileSeperator / --systemFile files/system/bootstrap.json --IpAddress $LOCAL_ADDRESS --Listener &
